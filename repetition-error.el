@@ -84,6 +84,13 @@
 ;;   - Fr 6. Feb 23:23:57 EST 2015:
 ;;      - Altered the documentation a bit
 ;;      - General description given of the main functionality.
+;;   - Do 19. Feb 22:28:18 EST 2015:
+;;      - added function get-next-n-words-with-ignore-list
+;;      - added function is-point-in-ignore-list
+;;      - changed regular expression in
+;;          - get-next-n-words-with-ignore-list
+;;          - get-next-n-words-from-point
+
 
 
 ;;; Code:
@@ -343,7 +350,7 @@ SIDE EFFECTS:
     );let definitions
     (while (and (> i 0) flag)
       (setq curpos (point))
-      (re-search-forward "[[:space:]\n]" (point-max) t)
+      (re-search-forward "[[:space:]\n]+" (point-max) t)
       (if (equal curpos (point))
 	  (setq flag nil)
       );if
@@ -356,6 +363,74 @@ SIDE EFFECTS:
     );if
   );let
 );;get-next-n-words-from-point
+
+(defun is-point-in-ignore-list (p ign)
+"Integer->listof (Integer Integer)->Boolean
+Given an integer p, and a list of integer tuples ign.
+If for a tuple (i j) in p we have that i<=p<=j, the function returns
+t, and nil otherwise.
+"
+  (let
+    (;let definitions
+      (tempList (remove-if-not (lambda (m) (and (<= (first m) p) (<= p (second m)))) ign))
+    );let definitions
+    (if (equal tempList ())
+      ;then
+      nil
+      ;else
+      t
+    );if
+  );let
+);is-point-in-ignore-list
+
+;(is-point-in-ignore-list 3 '((5 6) (7 15) (20 75)))
+;(is-point-in-ignore-list 10 '((5 6) (7 15) (20 75)))
+;(is-point-in-ignore-list 3 ())
+
+(defun get-next-n-words-with-ignore-list (n p ign)
+"Integer->Integer->listof (list int int)->string
+Given an integer n, an integer p, and a list of integer tuples ign.
+The parameter p represents a
+position in the buffer, n represents a number of words we want to
+extract. This function returns a string containing the next n words
+from point p in the buffer, if available. If for a tuple (i j) in
+ignore, a word appears at position somewhere between i and j, it will
+be ignored.
+If there are no n words,
+then the function returns the empty string.
+ASSUMPTIONS:
+ - The point n is at the beginning of a word
+ - The beginning of a regexp is found after p, not before.
+SIDE EFFECTS:
+ - The cursor will in the end actually be moved to position p
+ - Accesses cursor positions
+"
+  (goto-char p)
+  (let
+    (;let definitions
+     (flag t)
+     (i n)
+     (curpos (point))
+    );let definitions
+    (while (and (> i 0) flag)
+      (setq curpos (point))
+      (re-search-forward "[[:space:]\n]+" (point-max) t)
+      (if (equal curpos (point))
+	  (setq flag nil)
+      );if
+      (if (not (is-point-in-ignore-list curpos ign))
+	  (setq i (- i 1))
+      );if
+    );while
+    (goto-char p)
+    (if flag
+	(buffer-substring-no-properties p curpos)
+        ""
+    );if
+  );let
+);;get-next-n-words-with-ignore-list
+
+;(get-next-n-words-with-ignore-list 100 1 '((1 1000)))
 
 (defun exceeders (str number)
 "string->integer->listof (list string integer)
