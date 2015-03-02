@@ -75,21 +75,29 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; CHANGELOG:                                   ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;   - Mi 14. Jan 22:30:15 EST 2015:
-;;      Initial beta version done.
-;;   - Mo 2. Feb 11:04:53 EST 2015:
-;;      - Added function to find repetition errors starting from current
-;;        current cursor position.
-;;      - removed save-recursion from find-repetition error function.
-;;   - Fr 6. Feb 23:23:57 EST 2015:
-;;      - Altered the documentation a bit
-;;      - General description given of the main functionality.
-;;   - Do 19. Feb 22:28:18 EST 2015:
-;;      - added function get-next-n-words-with-ignore-list
-;;      - added function is-point-in-ignore-list
-;;      - changed regular expression in
-;;          - get-next-n-words-with-ignore-list
-;;          - get-next-n-words-from-point
+;;- Mi 14. Jan 22:30:15 EST 2015:
+;;   Initial beta version done.
+;;- Mo 2. Feb 11:04:53 EST 2015:
+;;   - Added function to find repetition errors starting from current
+;;     current cursor position.
+;;   - removed save-recursion from find-repetition error function.
+;;- Fr 6. Feb 23:23:57 EST 2015:
+;;   - Altered the documentation a bit
+;;   - General description given of the main functionality.
+;;- Do 19. Feb 22:28:18 EST 2015:
+;;   - added function get-next-n-words-with-ignore-list
+;;   - added function is-point-in-ignore-list
+;;   - changed regular expression in
+;;     - get-next-n-words-with-ignore-list
+;;     - get-next-n-words-from-point
+;;- So 1. Mär 21:47:08 EST 2015:
+;;   - changed the function get-next-n-words-with-ignore-list to
+;;     actually not even put stuff from ignore-list into the resulting
+;;     string. 
+;;   - started to write the function
+;;     create-ignore-list-for-latex-buffer
+
+
 
 
 
@@ -364,6 +372,18 @@ SIDE EFFECTS:
   );let
 );;get-next-n-words-from-point
 
+(defun create-ignore-list-for-latex-buffer ()
+"None->listof (Integer Integer)
+This function scans the buffer for substrings which can be ignored by
+our find-repetition-error routines, assuming that the current document
+is a LaTeX file. In particular, this function will detect matches to
+the following regular expressions and ignore them:
+\.+{  (Something like \section{ etc... the closing bracket will be
+       ignored later by exceeders anyway)
+"
+);create-ignore-list-for-latex-buffer ()
+
+
 (defun is-point-in-ignore-list (p ign)
 "Integer->listof (Integer Integer)->Boolean
 Given an integer p, and a list of integer tuples ign.
@@ -411,6 +431,7 @@ SIDE EFFECTS:
      (flag t)
      (i n)
      (curpos (point))
+     (result "")
     );let definitions
     (while (and (> i 0) flag)
       (setq curpos (point))
@@ -419,18 +440,24 @@ SIDE EFFECTS:
 	  (setq flag nil)
       );if
       (if (not (is-point-in-ignore-list curpos ign))
-	  (setq i (- i 1))
+	  (progn
+	    (setq result (concat result
+				 (buffer-substring-no-properties
+				  curpos (point))))
+	    (setq i (- i 1))
+	  );progn
       );if
     );while
     (goto-char p)
-    (if flag
-	(buffer-substring-no-properties p curpos)
-        ""
-    );if
+    ;; (if flag
+    ;; 	(buffer-substring-no-properties p curpos)
+    ;;     ""
+    ;; );if
+    result
   );let
 );;get-next-n-words-with-ignore-list
 
-;(get-next-n-words-with-ignore-list 100 1 '((1 1000)))
+;(get-next-n-words-with-ignore-list 100 1 '((1 2000) (3000 4000)))
 
 (defun exceeders (str number)
 "string->integer->listof (list string integer)
