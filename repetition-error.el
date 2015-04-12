@@ -96,9 +96,9 @@
 ;;     string. 
 ;;   - started to write the function
 ;;     create-ignore-list-for-latex-buffer
-
-
-
+;;- So 12. Apr 01:27:47 EDT 2015:
+;;   - continued working on create-ignore-list-for-latex-buffer;
+;;     changes not tested yet though
 
 
 ;;; Code:
@@ -377,12 +377,94 @@ SIDE EFFECTS:
 This function scans the buffer for substrings which can be ignored by
 our find-repetition-error routines, assuming that the current document
 is a LaTeX file. In particular, this function will detect matches to
-the following regular expressions and ignore them:
-\.+{  (Something like \section{ etc... the closing bracket will be
-       ignored later by exceeders anyway)
+the following expressions and ignore them:
+- Math-modes (\[.*\], \(.*\), $.*$, $$.*$$)
+- \.* in general (commands)
+TODO (untested)
 "
+  (let
+    (;let definitions
+      (curpos 1)
+      (result ())
+      (newEntryL 0)
+      (newEntryR 0)
+      (foundFlag nil)
+    );let definitions
+    (while (< curpos (point-max))
+      (setq foundFlag nil)
+      (if (and 
+	   (equal (string (char-after curpos) "\\"))
+	   (string-match "[a-zA-Z0-9]" (string (char-after (+ 1 curpos))))
+	  );and
+        ;;In this case, we have encountered a command
+        (progn
+	  (setq foundFlag t)
+	  (setq newEntryL curpos)
+	  (setq curpos (+ curpos 1))
+	  (while (string-match "[a-zA-Z0-9]"
+			       (string (char-after curpos)))
+	    (setq curpos (+ curpos 1))
+	  );while
+	  (setq newEntryR curpos)
+	  (setq result (cons (cons newEntryL (cons newEntryR ())) result))
+        );progn
+      );if
+      (if (and 
+	   (equal (string (char-after curpos)) "\\"))
+	   (or
+	    (equal "[" (string (char-after (+ 1 curpos))))
+	    (equal "(" (string (char-after (+ 1 curpos))))
+	  );and
+        ;;In this case, we have encountered math-mode via \[\] or \(\)
+        (progn
+	  (setq foundFlag t)
+	  (setq newEntryL curpos)
+	  (setq curpos (+ curpos 1))
+	  (while (and
+		  (not (equal (char-after curpos) "\\"))
+		  (or
+		   (not (equal "]" (string (char-after (+ 1 curpos)))))
+		   (not (equal ")" (string (char-after (+ 1 curpos)))))
+		  );or
+		 );and
+	    (setq curpos (+ curpos 1))
+	  );while
+	  (setq curpos (+ 1 curpos))
+	  (setq newEntryR curpos)
+	  (setq result (cons (cons newEntryL (cons newEntryR ())) result))
+        );progn
+      );if
+      (if (equal (string (char-after curpos) "$"))
+	;;In this case, we have math mode initialized by $
+	  (let
+	    (;let definitions
+	      (doubleDollar nil)
+	    );let definitions
+	    (setq foundFlag t)
+	    (setq newEntryL curpos)
+	    (if (equal (string (char-after (+ curpos 1))) "$")
+	      (progn
+		(setq doubleDollar t)
+		(setq curpos (+ 1 curpos))
+	      );progn
+	    );if
+	    (setq curpos (+ curpos 1))
+	    (while (not (equal (string (char-after curpos)) "$"))
+	      (setq curpos (+ curpos 1))
+	    );while
+	    (if doubleDollar
+		(setq curpos (+ curpos 1))
+	    );if
+	    (setq newEntryR curpos)
+	    (setq result (cons (cons newEntryL (cons newEntryR ())) result))
+	  );let
+      );if
+      (if (not foundFlag)
+	  (setq curpos (+ 1 curpos))
+      );if
+    );while
+  );let
 );create-ignore-list-for-latex-buffer ()
-
 
 (defun is-point-in-ignore-list (p ign)
 "Integer->listof (Integer Integer)->Boolean
