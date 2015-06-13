@@ -99,6 +99,9 @@
 ;;- So 12. Apr 01:27:47 EDT 2015:
 ;;   - continued working on create-ignore-list-for-latex-buffer;
 ;;     changes not tested yet though
+;;- Fr 12. Jun 22:36:01 EDT 2015:
+;;   - fixed an error in create-ignore-list-for-latex-buffer
+;;   - made first test on "real" LaTeX-buffer
 
 
 ;;; Code:
@@ -379,6 +382,7 @@ our find-repetition-error routines, assuming that the current document
 is a LaTeX file. In particular, this function will detect matches to
 the following expressions and ignore them:
 - Math-modes (\[.*\], \(.*\), $.*$, $$.*$$)
+- \begin{.*} and \end{.*} 
 - \.* in general (commands)
 TODO (untested)
 "
@@ -393,16 +397,19 @@ TODO (untested)
     (while (< curpos (point-max))
       (setq foundFlag nil)
       (if (and 
-	   (equal (string (char-after curpos) "\\"))
-	   (string-match "[a-zA-Z0-9]" (string (char-after (+ 1 curpos))))
+	   (equal (string (char-after curpos)) "\\")
+	   (equal (string-match "[a-zA-Z0-9]"
+				(string (char-after (+ 1 curpos))))
+		  0)
 	  );and
-        ;;In this case, we have encountered a command
+        ;;In this case, we have encountered a command; it can be of
+	;;the form \.* or \begin{.*}
         (progn
 	  (setq foundFlag t)
 	  (setq newEntryL curpos)
 	  (setq curpos (+ curpos 1))
-	  (while (string-match "[a-zA-Z0-9]"
-			       (string (char-after curpos)))
+	  (while (equal (string-match "\\([a-zA-Z0-9{}]\\|\\[\\|\\]\\)"
+			       (string (char-after curpos))) 0)
 	    (setq curpos (+ curpos 1))
 	  );while
 	  (setq newEntryR curpos)
@@ -410,10 +417,11 @@ TODO (untested)
         );progn
       );if
       (if (and 
-	   (equal (string (char-after curpos)) "\\"))
+	   (equal (string (char-after curpos)) "\\")
 	   (or
 	    (equal "[" (string (char-after (+ 1 curpos))))
 	    (equal "(" (string (char-after (+ 1 curpos))))
+	   );or
 	  );and
         ;;In this case, we have encountered math-mode via \[\] or \(\)
         (progn
@@ -434,7 +442,7 @@ TODO (untested)
 	  (setq result (cons (cons newEntryL (cons newEntryR ())) result))
         );progn
       );if
-      (if (equal (string (char-after curpos) "$"))
+      (if (equal (string (char-after curpos)) "$")
 	;;In this case, we have math mode initialized by $
 	  (let
 	    (;let definitions
@@ -463,6 +471,7 @@ TODO (untested)
 	  (setq curpos (+ 1 curpos))
       );if
     );while
+    result
   );let
 );create-ignore-list-for-latex-buffer ()
 
