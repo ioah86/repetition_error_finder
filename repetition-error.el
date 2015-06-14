@@ -102,6 +102,10 @@
 ;;- Fr 12. Jun 22:36:01 EDT 2015:
 ;;   - fixed an error in create-ignore-list-for-latex-buffer
 ;;   - made first test on "real" LaTeX-buffer
+;;- Sa 13. Jun 21:06:57 EDT 2015:
+;;   - Now two papers can be processed error-less by
+;;     create-ignore-list-for-latex-buffer. Small bugfixes were
+;;     needed. 
 
 
 ;;; Code:
@@ -422,6 +426,9 @@ TODO (untested)
 	    (equal "[" (string (char-after (+ 1 curpos))))
 	    (equal "(" (string (char-after (+ 1 curpos))))
 	   );or
+	   (not (equal (string (char-before curpos)) "\\"));; This
+	   ;; catches the newlines that have a distance written with
+	   ;; them, like e.g. \\[12pt]
 	  );and
         ;;In this case, we have encountered math-mode via \[\] or \(\)
         (progn
@@ -429,7 +436,7 @@ TODO (untested)
 	  (setq newEntryL curpos)
 	  (setq curpos (+ curpos 1))
 	  (while (and
-		  (not (equal (char-after curpos) "\\"))
+		  (not (equal (string (char-after curpos)) "\\"))
 		  (or
 		   (not (equal "]" (string (char-after (+ 1 curpos)))))
 		   (not (equal ")" (string (char-after (+ 1 curpos)))))
@@ -460,6 +467,7 @@ TODO (untested)
 	    (while (not (equal (string (char-after curpos)) "$"))
 	      (setq curpos (+ curpos 1))
 	    );while
+	    (setq curpos (+ curpos 1))
 	    (if doubleDollar
 		(setq curpos (+ curpos 1))
 	    );if
@@ -471,7 +479,7 @@ TODO (untested)
 	  (setq curpos (+ 1 curpos))
       );if
     );while
-    result
+    (reverse result)
   );let
 );create-ignore-list-for-latex-buffer ()
 
