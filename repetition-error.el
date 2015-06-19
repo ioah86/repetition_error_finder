@@ -106,9 +106,16 @@
 ;;   - Now two papers can be processed error-less by
 ;;     create-ignore-list-for-latex-buffer. Small bugfixes were
 ;;     needed. 
+;;- Do 18. Jun 22:16:10 EDT 2015:
+;;   - Altered the function find-repetition-error to now also include
+;;     an optional parameter ignlist, the ignore-list for certain
+;;     types of documents (e.g. LaTeX, etc.)
+;;   - added (and rudimentary tested) the functions
+;;        find-repetition-error-latex-from-point
+;;        find-repetition-error-latex-whole-buffer
 
 
-;;; Code:
+;;; CODE:
 
 
 (defvar repetition-error-word-block-size 100
@@ -159,6 +166,28 @@ SIDE-EFFECT:
   (find-repetition-error (point-min) (point-max) repetition-error-word-block-size repetition-error-min-occurrence)
 );find-repetition-error-whole-buffer
 
+(defun find-repetition-error-latex-whole-buffer ()
+"None->None
+This function will scan the whole buffer for repetitions of certain
+words, by ignoring LaTeX Commands.  If the buffer does not have repetition-error-word-block-size
+words (default: 100) then nothing is returned.  If in between, there
+is a block found with repetition-error-word-block-size words and a
+repetition of repetition-error-min-occurrence, then the repeated words
+will be highlighted for the user. Then he or she can decide, if s/he
+wants to go to the next repetition error or not using a
+command-prompt.
+SIDE-EFFECT:
+ - Takes user inputs
+ - Highlights text
+"
+  (interactive)
+  (find-repetition-error (point-min)
+			 (point-max)
+			 repetition-error-word-block-size
+			 repetition-error-min-occurrence
+			 (create-ignore-list-for-latex-buffer))
+);find-repetition-error-latex-whole-buffer
+
 (defun find-repetition-error-from-point ()
 "None->None
 This function will scan the whole buffer, starting from the current
@@ -178,9 +207,31 @@ SIDE-EFFECT:
   (find-repetition-error (point) (point-max) repetition-error-word-block-size repetition-error-min-occurrence)
 );find-repetition-error-whole-buffer
 
+(defun find-repetition-error-latex-from-point ()
+"None->None
+This function will scan the whole buffer, starting from the current
+cursor position, for repetitions of certain
+words, by igoring LaTeX commands. If the buffer does not have repetition-error-word-block-size
+words (default: 100) then nothing is returned.  If in between, there
+is a block found with repetition-error-word-block-size words and a
+repetition of repetition-error-min-occurrence, then the repeated words
+will be highlighted for the user. Then he or she can decide, if s/he
+wants to go to the next repetition error or not using a
+command-prompt.
+SIDE-EFFECT:
+ - Takes user inputs
+ - Highlights text
+"
+  (interactive)
+  (find-repetition-error (point)
+			 (point-max)
+			 repetition-error-word-block-size
+			 repetition-error-min-occurrence
+			 (create-ignore-list-for-latex-buffer))
+);find-repetition-error-latex-whole-buffer
 
-(defun find-repetition-error (begin end &optional nWords minRep)
-"integer->integer(->integer->integer)->None
+(defun find-repetition-error (begin end &optional nWords minRep ignlist)
+"integer->integer(->integer->integer->(listof (list integer integer)))->None
 This function will scan the buffer between the character at position
 begin and the character at position end for repetitions of certain
 words. Begin and end are non-negative integers. Optionally, the user
@@ -195,6 +246,9 @@ found with nWords words and a repetition of minRep, then the repeated
 words will be highlighted for the user. Then he or she can decide, if
 s/he wants to go to the next repetition error or not using a
 command-prompt.
+Another optional parameter is ignlist. This is a list containing
+intervals in which shall not be searched for repetition errors (There
+are e.g. commands in LaTeX inside these intervals, etc...)
 SIDE EFFECTS:
  - Takes user input
  - Highlights text
@@ -220,7 +274,10 @@ SIDE EFFECTS:
 	 (usrcmd nil)
 	);let definitions
       (while flag
-	(setq curWordBlock (get-next-n-words-from-point nWords (point)))
+	(if (not ignlist)
+	    (setq curWordBlock (get-next-n-words-from-point nWords (point)))
+	    (setq curWordBlock (get-next-n-words-with-ignore-list nWords (point) ignlist))
+	);if
 	(if
 	  (equal curWordBlock "")
 	  (progn
@@ -388,7 +445,6 @@ the following expressions and ignore them:
 - Math-modes (\[.*\], \(.*\), $.*$, $$.*$$)
 - \begin{.*} and \end{.*} 
 - \.* in general (commands)
-TODO (untested)
 "
   (let
     (;let definitions
