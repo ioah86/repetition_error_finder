@@ -113,6 +113,12 @@
 ;;   - added (and rudimentary tested) the functions
 ;;        find-repetition-error-latex-from-point
 ;;        find-repetition-error-latex-whole-buffer
+;;- Sa 20. Jun 23:36:55 EDT 2015:
+;;   - Reduced the complexity of the function
+;;     find-repetition-error. If there is an ignore-list, we assume
+;;     that it is sorted by the value of the first entry of each
+;;     contained list; hence, we can ignore a whole bunch if our point
+;;     has exceeded the entry in the ignore-list 
 
 
 ;;; CODE:
@@ -252,6 +258,8 @@ are e.g. commands in LaTeX inside these intervals, etc...)
 SIDE EFFECTS:
  - Takes user input
  - Highlights text
+ASSUMPTIONS:
+ - The elements in ignlist are sorted by their first entry.
 "
   (if (not nWords)
       (setq nWords repetition-error-word-block-size);then
@@ -276,6 +284,16 @@ SIDE EFFECTS:
       (while flag
 	(if (not ignlist)
 	    (setq curWordBlock (get-next-n-words-from-point nWords (point)))
+	    ;else
+	    (while (and
+		     (not (equal ignlist nil))
+		     (< (first (first ignlist)) (point))
+		   );and
+	      ;in this loop, we will remove unnecessary entries in
+	      ;ignlist, to reduce the complexity when executing
+	      ;get-next-n-words-with-ignore-list
+	      (setq ignlist (rest ignlist))
+	    );while
 	    (setq curWordBlock (get-next-n-words-with-ignore-list nWords (point) ignlist))
 	);if
 	(if
