@@ -119,6 +119,11 @@
 ;;     that it is sorted by the value of the first entry of each
 ;;     contained list; hence, we can ignore a whole bunch if our point
 ;;     has exceeded the entry in the ignore-list 
+;;- Mi 1. Jul 00:37:29 EDT 2015:
+;;   - Created function create-ignore-list-by-regexp
+;;   - modified create-ignore-list-for-latex-buffer to also include
+;;     math modes given by \begin{eqnarray[*]}..\end{eqnarray[*]}
+;;     (resp. align[*]) 
 
 
 ;;; CODE:
@@ -312,6 +317,27 @@ ASSUMPTIONS:
 		(if (> (point) end)
 		  (setq flag nil)
 		);if
+		(if ignlist
+		  ;;in this case, we can move even further
+		  (if (is-point-in-ignore-list (point) ignlist)
+		    (progn
+		      (while (and
+		          (not (equal ignlist nil))
+		          (< (first (first ignlist)) (point))
+		        );and
+		        ;in this loop, we will remove unnecessary entries in
+	                ;ignlist, to reduce the complexity when executing
+	                ;get-next-n-words-with-ignore-list
+	                (setq ignlist (rest ignlist))
+	              );while
+		      (goto-char (second (first ignlist)))
+		      (recenter 0)
+		      (if (> (point) end)
+		        (setq flag nil)
+		      );if
+		    );progn
+		  );if
+		);if
 	      );progn
 		;else
 	    (setq tempExc exc)
@@ -333,6 +359,27 @@ ASSUMPTIONS:
 	    (recenter 0)
 	    (if (> (point) end)
 	      (setq flag nil)
+	    );if
+	    (if ignlist
+	      ;;in this case, we can move even further
+	      (if (is-point-in-ignore-list (point) ignlist)
+	        (progn
+	          (while (and
+	              (not (equal ignlist nil))
+	              (< (first (first ignlist)) (point))
+	            );and
+	            ;in this loop, we will remove unnecessary entries in
+	            ;ignlist, to reduce the complexity when executing
+	            ;get-next-n-words-with-ignore-list
+	            (setq ignlist (rest ignlist))
+	          );while
+	          (goto-char (second (first ignlist)))
+	          (recenter 0)
+	          (if (> (point) end)
+	            (setq flag nil)
+	          );if
+	        );progn
+	      );if
 	    );if
 	  );if
 	);if
@@ -417,7 +464,6 @@ them as intervals."
 ;;(filter-known-words '() '(("abc" 4) ("def" 2)) 19 30)
 ;; (first '(("abc" 1 20)))
 
-
 (defun get-next-n-words-from-point (n p)
 "Integer->Integer->string
 Given an integer n and an integer p. The parameter p represents a
@@ -454,6 +500,41 @@ SIDE EFFECTS:
   );let
 );;get-next-n-words-from-point
 
+(defun create-ignore-list-by-regexp (inpRE)
+"string->listof (Integer Integer)
+This function consumes a regular expression inpRE, and finds it in the
+current buffer. For every found regexp, it produces its beginning
+point and end-point, and puts these coordinates in a list. A list of
+all these tuples is returned in the end.
+"
+  (save-excursion
+    (goto-char (point-min))
+    (let
+       (;let definitions begin
+         (curpos (point))
+         (flag t)
+	 (result ())
+	 (tempLeft 0)
+	 (tempRight 0)
+       );let definitions end
+       (while flag
+	 (re-search-forward inpRE (point-max) t)
+	 (if (equal curpos (point))
+	     (setq flag nil)
+	   ;else
+	   (setq tempRight (point))
+	   (re-search-backward inpRE (point-min) t)
+	   (setq tempLeft (point))
+	   (re-search-forward inpRE (point-max) t)
+	   (setq curpos (point))
+	   (setq result (cons (cons tempLeft (cons tempRight ())) result))
+	 );if
+       );while
+       result
+    );let
+  );save-excursion
+);create-ignore-list-by-regexp
+
 (defun create-ignore-list-for-latex-buffer ()
 "None->listof (Integer Integer)
 This function scans the buffer for substrings which can be ignored by
@@ -463,6 +544,11 @@ the following expressions and ignore them:
 - Math-modes (\[.*\], \(.*\), $.*$, $$.*$$)
 - \begin{.*} and \end{.*} 
 - \.* in general (commands)
+- math modes a la \begin{eqnarray[*]} .. \end{eqnarray[*]} or
+  \begin{align*} .. \end{align{*}}
+GENERAL ASSUMPTIONS:
+- The returned ignore-list is sorted by the first element of each
+  contained list.
 "
   (let
     (;let definitions
@@ -472,6 +558,10 @@ the following expressions and ignore them:
       (newEntryR 0)
       (foundFlag nil)
     );let definitions
+    (setq result (append result (create-ignore-list-by-regexp
+				 "[\\]begin{eqnarray[\*]?}.+[\\]end{eqnarray[\*]?}")))
+    (setq result (append result (create-ignore-list-by-regexp
+				 "[\\]begin{align[\*]?}.+[\\]end{align[\*]?}")))
     (while (< curpos (point-max))
       (setq foundFlag nil)
       (if (and 
@@ -553,7 +643,7 @@ the following expressions and ignore them:
 	  (setq curpos (+ 1 curpos))
       );if
     );while
-    (reverse result)
+    (sort (reverse result) (lambda (x y) (<= (first x) (first y))))
   );let
 );create-ignore-list-for-latex-buffer ()
 
