@@ -130,6 +130,8 @@
 ;;     change that back later.
 ;;   - Added Comment support for create-ignore-list-for-latex-buffer
 ;;   - DEBUG for begin/end eqnarray.
+;;   - found out about new interesting function "match-beginning" and
+;;     replaced accordingly
 
 
 ;;; CODE:
@@ -336,8 +338,8 @@ ASSUMPTIONS:
 	              ;;   ;get-next-n-words-with-ignore-list
 	              ;;   (setq ignlist (rest ignlist))
 	              ;; );while
-		      ;; (goto-char (second (first ignlist)))
-		      (re-search-forward "[[:space:]\n]" end t)
+		      (goto-char (second (is-point-in-ignore-list
+					  (point) ignlist)))
 		      (recenter 0)
 		      (if (> (point) end)
 		        (setq flag nil)
@@ -380,8 +382,7 @@ ASSUMPTIONS:
 	          ;;   ;get-next-n-words-with-ignore-list
 	          ;;   (setq ignlist (rest ignlist))
 	          ;; );while
-	          ;; (goto-char (second (first ignlist)))
-		  (re-search-forward "[[:space:]\n]" end t)
+	          (goto-char (second (is-point-in-ignore-list (point) ignlist)))
 	          (recenter 0)
 	          (if (> (point) end)
 	            (setq flag nil)
@@ -531,9 +532,7 @@ all these tuples is returned in the end.
 	     (setq flag nil)
 	   ;else
 	   (setq tempRight (point))
-	   (re-search-backward inpRE (point-min) t)
-	   (setq tempLeft (point))
-	   (re-search-forward inpRE (point-max) t)
+	   (setq tempLeft (match-beginning 0))
 	   (setq curpos (point))
 	   (setq result (cons (cons tempLeft (cons tempRight ())) result))
 	 );if
@@ -585,8 +584,11 @@ GENERAL ASSUMPTIONS:
 	  (setq foundFlag t)
 	  (setq newEntryL curpos)
 	  (setq curpos (+ curpos 1))
-	  (while (equal (string-match "\\([a-zA-Z0-9{}]\\|\\[\\|\\]\\)"
+	  (while (and
+		   (equal (string-match "\\([a-zA-Z0-9{}]\\|\\[\\|\\]\\)"
 			       (string (char-after curpos))) 0)
+		   (< curpos (- (point-max) 1))
+		 )
 	    (setq curpos (+ curpos 1))
 	  );while
 	  (setq newEntryR curpos)
@@ -684,7 +686,7 @@ t, and nil otherwise.
       ;then
       nil
       ;else
-      t
+      (first tempList)
     );if
   );let
 );is-point-in-ignore-list
