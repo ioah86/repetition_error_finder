@@ -123,7 +123,13 @@
 ;;   - Created function create-ignore-list-by-regexp
 ;;   - modified create-ignore-list-for-latex-buffer to also include
 ;;     math modes given by \begin{eqnarray[*]}..\end{eqnarray[*]}
-;;     (resp. align[*]) 
+;;     (resp. align[*])
+;;- So 12. Jul 21:11:25 EDT 2015:
+;;   - Changed the optimization in find-repetition-error with the
+;;     ignore list back again, as I have ambiguous output. Maybe I will
+;;     change that back later.
+;;   - Added Comment support for create-ignore-list-for-latex-buffer
+;;   - DEBUG for begin/end eqnarray.
 
 
 ;;; CODE:
@@ -290,15 +296,15 @@ ASSUMPTIONS:
 	(if (not ignlist)
 	    (setq curWordBlock (get-next-n-words-from-point nWords (point)))
 	    ;else
-	    (while (and
-		     (not (equal ignlist nil))
-		     (< (first (first ignlist)) (point))
-		   );and
-	      ;in this loop, we will remove unnecessary entries in
-	      ;ignlist, to reduce the complexity when executing
-	      ;get-next-n-words-with-ignore-list
-	      (setq ignlist (rest ignlist))
-	    );while
+	    ;; (while (and
+	    ;; 	     (not (equal ignlist nil))
+	    ;; 	     (< (first (first ignlist)) (point))
+	    ;; 	   );and
+	    ;;   ;in this loop, we will remove unnecessary entries in
+	    ;;   ;ignlist, to reduce the complexity when executing
+	    ;;   ;get-next-n-words-with-ignore-list
+	    ;;   (setq ignlist (rest ignlist))
+	    ;; );while
 	    (setq curWordBlock (get-next-n-words-with-ignore-list nWords (point) ignlist))
 	);if
 	(if
@@ -321,16 +327,17 @@ ASSUMPTIONS:
 		  ;;in this case, we can move even further
 		  (if (is-point-in-ignore-list (point) ignlist)
 		    (progn
-		      (while (and
-		          (not (equal ignlist nil))
-		          (< (first (first ignlist)) (point))
-		        );and
-		        ;in this loop, we will remove unnecessary entries in
-	                ;ignlist, to reduce the complexity when executing
-	                ;get-next-n-words-with-ignore-list
-	                (setq ignlist (rest ignlist))
-	              );while
-		      (goto-char (second (first ignlist)))
+		      ;; (while (and
+		      ;;     (not (equal ignlist nil))
+		      ;;     (< (first (first ignlist)) (point))
+		      ;;   );and
+		      ;;   ;in this loop, we will remove unnecessary entries in
+	              ;;   ;ignlist, to reduce the complexity when executing
+	              ;;   ;get-next-n-words-with-ignore-list
+	              ;;   (setq ignlist (rest ignlist))
+	              ;; );while
+		      ;; (goto-char (second (first ignlist)))
+		      (re-search-forward "[[:space:]\n]" end t)
 		      (recenter 0)
 		      (if (> (point) end)
 		        (setq flag nil)
@@ -364,16 +371,17 @@ ASSUMPTIONS:
 	      ;;in this case, we can move even further
 	      (if (is-point-in-ignore-list (point) ignlist)
 	        (progn
-	          (while (and
-	              (not (equal ignlist nil))
-	              (< (first (first ignlist)) (point))
-	            );and
-	            ;in this loop, we will remove unnecessary entries in
-	            ;ignlist, to reduce the complexity when executing
-	            ;get-next-n-words-with-ignore-list
-	            (setq ignlist (rest ignlist))
-	          );while
-	          (goto-char (second (first ignlist)))
+	          ;; (while (and
+	          ;;     (not (equal ignlist nil))
+	          ;;     (< (first (first ignlist)) (point))
+	          ;;   );and
+	          ;;   ;in this loop, we will remove unnecessary entries in
+	          ;;   ;ignlist, to reduce the complexity when executing
+	          ;;   ;get-next-n-words-with-ignore-list
+	          ;;   (setq ignlist (rest ignlist))
+	          ;; );while
+	          ;; (goto-char (second (first ignlist)))
+		  (re-search-forward "[[:space:]\n]" end t)
 	          (recenter 0)
 	          (if (> (point) end)
 	            (setq flag nil)
@@ -546,6 +554,7 @@ the following expressions and ignore them:
 - \.* in general (commands)
 - math modes a la \begin{eqnarray[*]} .. \end{eqnarray[*]} or
   \begin{align*} .. \end{align{*}}
+- Comments beginning with '%' and going until the end of the line
 GENERAL ASSUMPTIONS:
 - The returned ignore-list is sorted by the first element of each
   contained list.
@@ -559,9 +568,9 @@ GENERAL ASSUMPTIONS:
       (foundFlag nil)
     );let definitions
     (setq result (append result (create-ignore-list-by-regexp
-				 "[\\]begin{eqnarray[\*]?}.+[\\]end{eqnarray[\*]?}")))
+				 "\\([\\]begin{eqnarray[\*]}\\(.\\|\n\\)+[\\]end{eqnarray[\*]}\\|[\\]begin{eqnarray}\\(.\\|\n\\)+[\\]end{eqnarray}\\)")))
     (setq result (append result (create-ignore-list-by-regexp
-				 "[\\]begin{align[\*]?}.+[\\]end{align[\*]?}")))
+				 "\\([\\]begin{align[\*]}\\(.\\|\n\\)+[\\]end{align[\*]}\\|[\\]begin{align}\\(.\\|\n\\)+[\\]end{align}\\)")))
     (while (< curpos (point-max))
       (setq foundFlag nil)
       (if (and 
@@ -638,6 +647,20 @@ GENERAL ASSUMPTIONS:
 	    (setq newEntryR curpos)
 	    (setq result (cons (cons newEntryL (cons newEntryR ())) result))
 	  );let
+      );if
+      (if (equal (string (char-after curpos)) "%")
+	;;In this case, we have encountered a comment. Ignore
+	;;everything until the end of the line.
+	(progn
+	  (setq foundFlag t)
+	  (setq newEntryL curpos)
+	  (setq curpos (+ curpos 1))
+	  (while (not (equal (string (char-after curpos)) "\n"))
+	    (setq curpos (+ curpos 1))
+	  );while
+	  (setq newEntryR curpos)
+	  (setq result (cons (cons newEntryL (cons newEntryR ())) result))
+        );progn
       );if
       (if (not foundFlag)
 	  (setq curpos (+ 1 curpos))
