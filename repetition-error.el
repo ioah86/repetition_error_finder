@@ -132,7 +132,8 @@
 ;;   - DEBUG for begin/end eqnarray.
 ;;   - found out about new interesting function "match-beginning" and
 ;;     replaced accordingly
-
+;;   - Put some non-greedy-search for the align and
+;;     eqnarray-Thing.
 
 ;;; CODE:
 
@@ -567,9 +568,9 @@ GENERAL ASSUMPTIONS:
       (foundFlag nil)
     );let definitions
     (setq result (append result (create-ignore-list-by-regexp
-				 "\\([\\]begin{eqnarray[\*]}\\(.\\|\n\\)+[\\]end{eqnarray[\*]}\\|[\\]begin{eqnarray}\\(.\\|\n\\)+[\\]end{eqnarray}\\)")))
+				 "[\\]begin{eqnarray[\*]?}\\(.\\|\n\\)+?[\\]end{eqnarray[\*]?}")))
     (setq result (append result (create-ignore-list-by-regexp
-				 "\\([\\]begin{align[\*]}\\(.\\|\n\\)+[\\]end{align[\*]}\\|[\\]begin{align}\\(.\\|\n\\)+[\\]end{align}\\)")))
+				 "[\\]begin{align[\*]?}\\(.\\|\n\\)+?[\\]end{align[\*]?}")))
     (while (< curpos (point-max))
       (setq foundFlag nil)
       (if (and 
