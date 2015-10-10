@@ -134,6 +134,19 @@
 ;;     replaced accordingly
 ;;   - Put some non-greedy-search for the align and
 ;;     eqnarray-Thing.
+;;- Do 3. Sep 22:36:50 EDT 2015:
+;;   - Edited the function create-ignore-list-for-latex-buffer, so
+;;     that it uses create-ignore-list-by-regexp to find
+;;     commented-out-areas.
+;;   - get-next-n-words-with-ignore-list debugged and optimized
+;;- Sa 10. Okt 14:55:38 EDT 2015:
+;;   - Added tests for update-knowns-list (finally figured out how to
+;;     test properly in emacs lisp)
+;;   - Added tests for filter-known-words.
+;;   - Added tests for is-point-in-ignore-list
+;;   - Added Tests for exceeders
+
+
 
 ;;; CODE:
 
@@ -414,7 +427,7 @@ ASSUMPTIONS:
   (let
       (;let definitions
        (tempNE newExceeders)
-       (result (remove-if (lambda (m) (if (< (third m) leftBound) t nil)) knownList))
+       (result (reverse (remove-if (lambda (m) (if (< (third m) leftBound) t nil)) knownList)))
       );let definitions
     (while (not (equal tempNE ()))
       (setq result 
@@ -422,16 +435,71 @@ ASSUMPTIONS:
 		  result))
       (setq tempNE (rest tempNE))
     );while
-    result
+    (reverse result)
   );let
 );update-knowns-list
+
+;; Tests
+(ert-deftest test-update-knowns-list ()
+"Tests the function update-knowns-list. These are the covered test
+cases:
+1. both lists are empty
+2. knownList is empty
+3. newExceeders is empty and the result is knownslist
+4. newExceeders is empty and there are entries in knownslist that are
+   filtered.
+5. Both lists are non-empty and in the end we get a clean
+   concatenation of both.
+6. Both lists are non-empty, but some entries in knownslist will be
+   filtered.
+"
+  ;;1.
+  (should (equal (update-knowns-list nil nil 0 1) nil))
+  ;;2.
+  (should (equal (update-knowns-list nil (list (list "hello" 0)
+					       (list "kitty" 6)) 0
+					       100)
+		 (list (list "hello" 0 100)
+		       (list "kitty" 0 100))))
+  ;;3.
+  (should (equal (update-knowns-list (list (list "hello" 0 50)
+					   (list "kitty" 6 50)) nil 0
+					   100)
+		 (list (list "hello" 0 50)
+		       (list "kitty" 6 50))))
+  ;;4.
+  (should (equal (update-knowns-list (list (list "hello" 0 50)
+					   (list "kitty" 6 60)) nil 51
+					   100)
+		 (list (list "kitty" 6 60))))
+  ;;5.
+  (should (equal (update-knowns-list (list (list "hello" 0 50)
+					   (list "kitty" 0 50))
+				     (list (list "Dear Daniel" 70)
+					   (list "Badtz-Maru" 85))
+				     0 100)
+		 (list (list "hello" 0 50)
+		       (list "kitty" 0 50)
+		       (list "Dear Daniel" 0 100)
+		       (list "Badtz-Maru" 0 100))))
+  ;;6.
+  (should (equal (update-knowns-list (list (list "hello" 0 50)
+					   (list "kitty" 0 60))
+				     (list (list "Dear Daniel" 70)
+					   (list "Badtz-Maru" 85))
+				     51 100)
+		 (list (list "kitty" 0 60)
+		       (list "Dear Daniel" 51 100)
+		       (list "Badtz-Maru" 51 100))))
+);;test-update-knowns-list
 
 (defun filter-known-words (knownList newExceeders leftBound rightBound)
 "(listof (list string int int))->(listof (list string int))->int->int->(listof (list string int))
 This function consumes a list, knownlist, whose entries are tuples of a string and two integers,
 a list with tuples of string and int, newExceeders, and two integers, leftBound and rightBound.
 It returns a filtered copy of the list newExceeders: If there is an entry (s i j) in knownList,
-and the intervals [i,j] nad [leftBound, rightBound] have a nontrivial intersection, it will be omitted.
+and the intervals [i,j] and [leftBound, rightBound] have a nontrivial
+intersection, it will be omitted in newExceeders.
 ASSUMPTIONS:
  - In every entry (s i j) of knownList, we always have i<j
  - leftBound < rightBound
@@ -470,9 +538,42 @@ them as intervals."
   );labels
 );filter-known-words
 
-;(filter-known-words '(("abc" 1 20) ("cde" 5 25)) '(("abc" 4) ("def" 2)) 19 30)
-;;(filter-known-words '() '(("abc" 4) ("def" 2)) 19 30)
-;; (first '(("abc" 1 20)))
+;; Tests
+
+(ert-deftest test-filter-known-words ()
+"Tests the function filter-known words. The covered test cases are the
+following:
+1. Both knownList and newExceeders are empty.
+2. knownslist is empty, newExceeders is not.
+3. knownsList is non-empty, newExceeders is empty
+4. Both lists are non-empty, but nothing is filtered from
+   newExceeders based on the fact that the words are different.
+5. Both lists are non-empty, but nothing is filtered from newExceeders
+   based on the fact that the interval in one entry in knownslist is
+   not right.
+6. Both lists are non-empty, and there is a filtering happening in
+   newExceeders."
+  ;;1.
+  (should (equal (filter-known-words nil nil 0 100) nil))
+  ;;2.
+  (should (equal (filter-known-words nil '(("abc" 4) ("def" 2)) 19 30)
+		 (list (list "abc" 4) (list "def" 2))))
+  ;;3.
+  (should (equal (filter-known-words '(("abc" 4 20) ("def" 2 35)) nil 19 30)
+		 nil))
+  ;;4.
+  (should (equal (filter-known-words '(("abc" 4 20) ("def" 2 35))
+				     '(("cde" 10) ("efg" 15)) 0 100)
+		 '(("cde" 10) ("efg" 15))))
+  ;;5.
+  (should (equal (filter-known-words '(("abc" 1 18) ("cde" 5 25))
+				     '(("abc" 4) ("def" 2)) 19 30)
+		 '(("abc" 4) ("def" 2))))
+  ;;6.
+  (should (equal (filter-known-words '(("abc" 1 20) ("cde" 5 25))
+				     '(("abc" 4) ("def" 2)) 19 30)
+		 '(("def" 2))))
+);test-filter-known-words
 
 (defun get-next-n-words-from-point (n p)
 "Integer->Integer->string
@@ -571,6 +672,8 @@ GENERAL ASSUMPTIONS:
 				 "[\\]begin{eqnarray[\*]?}\\(.\\|\n\\)+?[\\]end{eqnarray[\*]?}")))
     (setq result (append result (create-ignore-list-by-regexp
 				 "[\\]begin{align[\*]?}\\(.\\|\n\\)+?[\\]end{align[\*]?}")))
+    (setq result (append result (create-ignore-list-by-regexp
+				 "%.*?$")))
     (while (< curpos (point-max))
       (setq foundFlag nil)
       (if (and 
@@ -651,20 +754,6 @@ GENERAL ASSUMPTIONS:
 	    (setq result (cons (cons newEntryL (cons newEntryR ())) result))
 	  );let
       );if
-      (if (equal (string (char-after curpos)) "%")
-	;;In this case, we have encountered a comment. Ignore
-	;;everything until the end of the line.
-	(progn
-	  (setq foundFlag t)
-	  (setq newEntryL curpos)
-	  (setq curpos (+ curpos 1))
-	  (while (not (equal (string (char-after curpos)) "\n"))
-	    (setq curpos (+ curpos 1))
-	  );while
-	  (setq newEntryR curpos)
-	  (setq result (cons (cons newEntryL (cons newEntryR ())) result))
-        );progn
-      );if
       (if (not foundFlag)
 	  (setq curpos (+ 1 curpos))
       );if
@@ -677,7 +766,7 @@ GENERAL ASSUMPTIONS:
 "Integer->listof (Integer Integer)->Boolean
 Given an integer p, and a list of integer tuples ign.
 If for a tuple (i j) in p we have that i<=p<=j, the function returns
-t, and nil otherwise.
+the first interval in ign with p in it, and nil otherwise.
 "
   (let
     (;let definitions
@@ -692,9 +781,31 @@ t, and nil otherwise.
   );let
 );is-point-in-ignore-list
 
-;(is-point-in-ignore-list 3 '((5 6) (7 15) (20 75)))
-;(is-point-in-ignore-list 10 '((5 6) (7 15) (20 75)))
-;(is-point-in-ignore-list 3 ())
+;; Tests:
+(ert-deftest is-point-in-ignore-list-test ()
+"This function tests the helper function is-point-in-ignore-list.
+The test-cases are the following:
+1. ignore list empty
+2. point not in ignore list, while ignore list is not empty.
+3. point in ignore list
+4. Point in ignore-list boundary case left
+5. Point in ignore-list boundary case right"
+  ;1.
+  (should (equal (is-point-in-ignore-list 3 nil) nil))
+  ;2.
+  (should (equal (is-point-in-ignore-list 3 '((5 6) (7 15) (20 75)))
+		 nil))
+  ;3.
+  (should (equal (is-point-in-ignore-list 10 '((5 6) (7 15) (20 75)))
+		 '(7 15)))
+  ;4.
+  (should (equal (is-point-in-ignore-list 20 '((5 6) (7 15) (20 75)))
+		 '(20 75)))
+  ;5.
+  (should (equal (is-point-in-ignore-list 6 '((5 6) (7 15) (20 75)))
+		 '(5 6)))
+);is-point-in-ignore-list-test
+
 
 (defun get-next-n-words-with-ignore-list (n p ign)
 "Integer->Integer->listof (list int int)->string
@@ -708,7 +819,7 @@ be ignored.
 If there are no n words,
 then the function returns the empty string.
 ASSUMPTIONS:
- - The point n is at the beginning of a word
+ - The point p is at the beginning of a word
  - The beginning of a regexp is found after p, not before.
 SIDE EFFECTS:
  - The cursor will in the end actually be moved to position p
@@ -720,6 +831,7 @@ SIDE EFFECTS:
      (flag t)
      (i n)
      (curpos (point))
+     (temp-touple ())
      (result "")
     );let definitions
     (while (and (> i 0) flag)
@@ -728,21 +840,23 @@ SIDE EFFECTS:
       (if (equal curpos (point))
 	  (setq flag nil)
       );if
-      (if (not (is-point-in-ignore-list curpos ign))
+      (setq temp-touple (is-point-in-ignore-list (point) ign))
+      (if (not temp-touple)
 	  (progn
 	    (setq result (concat result
 				 (buffer-substring-no-properties
 				  curpos (point))))
 	    (setq i (- i 1))
 	  );progn
+	  ;else
+          (goto-char (second temp-touple))
       );if
     );while
     (goto-char p)
-    ;; (if flag
-    ;; 	(buffer-substring-no-properties p curpos)
-    ;;     ""
-    ;; );if
-    result
+    (if flag
+    	result
+        ""
+    );if
   );let
 );;get-next-n-words-with-ignore-list
 
@@ -754,7 +868,8 @@ Given a string str, and a number 'number', this function returns a
 list of tuples (a, b), where a is a word in str, which appears b
 times in str, where b>=number. Furthermore, for a, we ignore it
 if its length is smaller than 4 letters, and we remove all space
-characters, as well as digits and punctuation symbols.
+characters, as well as digits and punctuation symbols, and all the
+letters in a are lowercase.
 "
   (labels 
       (;function definitions
@@ -790,6 +905,46 @@ characters, as well as digits and punctuation symbols.
     );labels body
   );;labels
 );exceeders
+
+;; Tests
+
+(ert-deftest exceeders-test ()
+"This function tests the exceeders-function.
+The covered test-cases are:
+1. Empty string
+2. number is 0, and all the words in the list have 4 or more
+   characters and do not contain special symbols.
+3. number is 0, and all words in the list have 4 or more characters,
+   and contain special symbols.
+4. number is 0, and there is no whitespace in the string. Only
+   characters, symbols and numbers.
+5. number is 0, and there are some less than four letter words in the
+   string.
+6. number is not 0, and no word is equal or exceeds the number.
+7. number is not 0, and some, but not all, words do exceed this number."
+  ;1.
+  (should (equal (exceeders "" 2) nil))
+  ;2.
+  (should (equal (exceeders "test test test test Albert" 0)
+		 (list (list "test" 4) (list "albert" 1))))
+  ;3.
+  (should (equal (exceeders "test. test! test? Albert1" 0)
+		 (list (list "test" 3) (list "albert" 1))))
+  ;4.
+  (should (equal (exceeders "test.test!2353%%^_test????123Albert1" 0)
+		 (list (list "test" 3) (list "albert" 1))))
+  ;5.
+  (should (equal (exceeders "abc test 1234 hallo wo bist du?" 0)
+		 (list (list "test" 1)
+		       (list "hallo" 1)
+		       (list "bist" 1))))
+  ;6.
+  (should (equal (exceeders "test test test test test. This is a \
+normal normal sentence" 6) nil))
+  ;7.
+  (should (equal (exceeders "test abc test abc test. hallo hallo." 3)
+		 (list (list "test" 3))))
+);exceeders-test
 
 (provide 'repetition-error)
 ;;; repetition-error.el ends here
