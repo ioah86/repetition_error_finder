@@ -145,6 +145,10 @@
 ;;   - Added tests for filter-known-words.
 ;;   - Added tests for is-point-in-ignore-list
 ;;   - Added Tests for exceeders
+;;- So 11. Okt 22:07:23 EDT 2015:
+;;   - Added tests for transform-complete-ci-string
+;;   - Added test for get-next-n-words-from-point
+
 
 
 
@@ -178,8 +182,37 @@ well as the lower-case of that same letter. For example, the string
 "
   (replace-regexp-in-string "[[:alpha:]]"
 	 (lambda (z) (concat "[" (downcase z) (upcase z) "]"))
-	 s)
+	 s
+	 t)
 );transform-complete-ci-string
+
+(ert-deftest transform-complete-ci-string-test ()
+"This function tests the fuction transform-complete-ci-string.
+The covered test cases are:
+1. Empty string
+2. String with one letter, lowercase
+3. String with one letter, uppercase
+4. String with more than one letter, all lowercase
+5. String with more than one letter, all uppercase
+6. String with more than one letter, mixed upper and lower-case
+"
+  ;1.
+  (should (equal (transform-complete-ci-string "") ""))
+  ;2.
+  (should (equal (transform-complete-ci-string "k") "[kK]"))
+  ;3.
+  (should (equal (transform-complete-ci-string "K") "[kK]"))
+  ;4.
+  (should (equal (transform-complete-ci-string "should")
+		 "[sS][hH][oO][uU][lL][dD]"))
+  ;5.
+  (should (equal (transform-complete-ci-string "SHOULD")
+		 "[sS][hH][oO][uU][lL][dD]"))
+  ;6.
+  (should (equal (transform-complete-ci-string "sHoulD")
+		 "[sS][hH][oO][uU][lL][dD]"))
+);transform-complete-ci-string-test
+
 
 (defun find-repetition-error-whole-buffer ()
 "None->None
@@ -583,7 +616,7 @@ extract. This function returns a string containing the next n words
 from point p in the buffer, if available. If there are no n words,
 then the function returns the empty string.
 ASSUMPTIONS:
- - The point n is at the beginning of a word
+ - The point p is at the beginning of a word
 SIDE EFFECTS:
  - The cursor will in the end actually be moved to position p
  - Accesses cursor positions
@@ -603,6 +636,7 @@ SIDE EFFECTS:
       );if
       (setq i (- i 1))
     );while
+    (setq curpos (point))
     (goto-char p)
     (if flag
 	(buffer-substring-no-properties p curpos)
@@ -610,6 +644,54 @@ SIDE EFFECTS:
     );if
   );let
 );;get-next-n-words-from-point
+
+(ert-deftest get-next-n-words-from-point-test ()
+"Here, we test the function get-next-n-words-from-point.
+Our test suite contains the following test-cases:
+1. An empty buffer
+2. Boundary case for number of words with boundary that will produce
+   text.
+3. Boundary case for number of words with boundary that will not
+   produce text.
+4. Large text, boundary case producing text.
+5. Large text, boundary case not producing text.
+6. Large text, non-boundary case not producing text.
+7. Large text, non-boundary case producing text.
+"
+  ;1.
+  (set-buffer (find-file "./empty_test_buffer.txt"))
+  (should (equal (get-next-n-words-from-point 100 1) ""))
+  (kill-buffer "empty_test_buffer.txt")
+  ;2.
+  (set-buffer (find-file "./test_buffer_3_words.txt"))
+  (should (equal (get-next-n-words-from-point 3 1) "Lorem ipsum dolor.\n"))
+  (kill-buffer "test_buffer_3_words.txt")
+  ;3.
+  (set-buffer (find-file "./test_buffer_3_words.txt"))
+  (should (equal (get-next-n-words-from-point 4 1) ""))
+  (kill-buffer "test_buffer_3_words.txt")
+  ;4.
+  (set-buffer (find-file "./test_buffer_50_words.txt"))
+  (should (equal (get-next-n-words-from-point 50 1) "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam
+nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat,
+sed diam voluptua. At vero eos et accusam et justo duo dolores et ea
+rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem
+ipsum dolor sit amet.
+"))
+  (kill-buffer "test_buffer_50_words.txt")
+  ;5.
+  (set-buffer (find-file "./test_buffer_50_words.txt"))
+  (should (equal (get-next-n-words-from-point 51 1) ""))
+  (kill-buffer "test_buffer_50_words.txt")
+  ;6.
+  (set-buffer (find-file "./test_buffer_50_words.txt"))
+  (should (equal (get-next-n-words-from-point 100 1) ""))
+  (kill-buffer "test_buffer_50_words.txt")
+  ;7.
+  (set-buffer (find-file "./test_buffer_50_words.txt"))
+  (should (equal (get-next-n-words-from-point 3 1) "Lorem ipsum dolor "))
+  (kill-buffer "test_buffer_50_words.txt")
+);get-next-n-words-from-point-test
 
 (defun create-ignore-list-by-regexp (inpRE)
 "string->listof (Integer Integer)
