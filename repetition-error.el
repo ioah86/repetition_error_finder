@@ -148,8 +148,12 @@
 ;;- So 11. Okt 22:07:23 EDT 2015:
 ;;   - Added tests for transform-complete-ci-string
 ;;   - Added test for get-next-n-words-from-point
-
-
+;;- Mo 12. Okt 12:27:40 EDT 2015:
+;;   - Moved the test-files into separate folder and altered the paths
+;;     in the tests
+;;   - Added tests for get-next-n-words-with-ignore-list
+;;   - rewrite of the function get-next-n-words-with-ignore-list to
+;;     catch some special cases
 
 
 ;;; CODE:
@@ -659,19 +663,19 @@ Our test suite contains the following test-cases:
 7. Large text, non-boundary case producing text.
 "
   ;1.
-  (set-buffer (find-file "./empty_test_buffer.txt"))
+  (set-buffer (find-file "./test_files/empty_test_buffer.txt"))
   (should (equal (get-next-n-words-from-point 100 1) ""))
   (kill-buffer "empty_test_buffer.txt")
   ;2.
-  (set-buffer (find-file "./test_buffer_3_words.txt"))
+  (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
   (should (equal (get-next-n-words-from-point 3 1) "Lorem ipsum dolor.\n"))
   (kill-buffer "test_buffer_3_words.txt")
   ;3.
-  (set-buffer (find-file "./test_buffer_3_words.txt"))
+  (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
   (should (equal (get-next-n-words-from-point 4 1) ""))
   (kill-buffer "test_buffer_3_words.txt")
   ;4.
-  (set-buffer (find-file "./test_buffer_50_words.txt"))
+  (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
   (should (equal (get-next-n-words-from-point 50 1) "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam
 nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat,
 sed diam voluptua. At vero eos et accusam et justo duo dolores et ea
@@ -680,15 +684,15 @@ ipsum dolor sit amet.
 "))
   (kill-buffer "test_buffer_50_words.txt")
   ;5.
-  (set-buffer (find-file "./test_buffer_50_words.txt"))
+  (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
   (should (equal (get-next-n-words-from-point 51 1) ""))
   (kill-buffer "test_buffer_50_words.txt")
   ;6.
-  (set-buffer (find-file "./test_buffer_50_words.txt"))
+  (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
   (should (equal (get-next-n-words-from-point 100 1) ""))
   (kill-buffer "test_buffer_50_words.txt")
   ;7.
-  (set-buffer (find-file "./test_buffer_50_words.txt"))
+  (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
   (should (equal (get-next-n-words-from-point 3 1) "Lorem ipsum dolor "))
   (kill-buffer "test_buffer_50_words.txt")
 );get-next-n-words-from-point-test
@@ -721,10 +725,46 @@ all these tuples is returned in the end.
 	   (setq result (cons (cons tempLeft (cons tempRight ())) result))
 	 );if
        );while
-       result
+       (reverse result)
     );let
   );save-excursion
 );create-ignore-list-by-regexp
+
+;; Tests
+(ert-deftest create-ignore-list-by-regexp-test ()
+"This is a collection of tests for create-ignore-list-by-regexp.
+The covered test cases are:
+1. empty file, empty regex
+2. empty file, nonempty regex
+3. non-empty file, empty regex
+4. regex is not in non-empty file
+5. regex is in non-empty file exactly once.
+6. regex is in non-empty file more than once."
+  ;1.
+  (set-buffer (find-file "./test_files/empty_test_buffer.txt"))
+  (should (equal (create-ignore-list-by-regexp "") nil))
+  (kill-buffer "empty_test_buffer.txt")
+  ;2.
+  (set-buffer (find-file "./test_files/empty_test_buffer.txt"))
+  (should (equal (create-ignore-list-by-regexp "[a-zA-Z]+") nil))
+  (kill-buffer "empty_test_buffer.txt")
+  ;3.
+  (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
+  (should (equal (create-ignore-list-by-regexp "") nil))
+  (kill-buffer "test_buffer_50_words.txt")
+  ;4.
+  (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
+  (should (equal (create-ignore-list-by-regexp "[0-9]+!$") nil))
+  (kill-buffer "test_buffer_50_words.txt")
+  ;5.
+  (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
+  (should (equal (create-ignore-list-by-regexp "Lorem") '((1 6)) ))
+  (kill-buffer "test_buffer_3_words.txt")
+  ;6.
+  (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
+  (should (equal (create-ignore-list-by-regexp "Lorem") '((1 6) (269 274)) ))
+  (kill-buffer "test_buffer_50_words.txt")
+);create-ignore-list-by-regexp-test
 
 (defun create-ignore-list-for-latex-buffer ()
 "None->listof (Integer Integer)
@@ -845,7 +885,7 @@ GENERAL ASSUMPTIONS:
 );create-ignore-list-for-latex-buffer ()
 
 (defun is-point-in-ignore-list (p ign)
-"Integer->listof (Integer Integer)->Boolean
+"Integer->listof (Integer Integer)->(Integer Integer)
 Given an integer p, and a list of integer tuples ign.
 If for a tuple (i j) in p we have that i<=p<=j, the function returns
 the first interval in ign with p in it, and nil otherwise.
@@ -915,6 +955,7 @@ SIDE EFFECTS:
      (curpos (point))
      (temp-touple ())
      (result "")
+     (temp-word "")
     );let definitions
     (while (and (> i 0) flag)
       (setq curpos (point))
@@ -922,18 +963,23 @@ SIDE EFFECTS:
       (if (equal curpos (point))
 	  (setq flag nil)
       );if
-      (setq temp-touple (is-point-in-ignore-list (point) ign))
-      (if (not temp-touple)
+      (setq temp-word "")
+      (while (< curpos (point))
+	(if (not (is-point-in-ignore-list curpos ign))
+	    (setq temp-word (concat temp-word
+				    (buffer-substring-no-properties
+				     curpos (+ 1 curpos))))
+	);if
+	(setq curpos (+ 1 curpos))
+      );while
+      (if (string-match "[[:alpha:]]" temp-word)
 	  (progn
-	    (setq result (concat result
-				 (buffer-substring-no-properties
-				  curpos (point))))
+	    (setq result (concat result temp-word))
 	    (setq i (- i 1))
 	  );progn
-	  ;else
-          (goto-char (second temp-touple))
       );if
     );while
+    ;; (setq curpos (point))
     (goto-char p)
     (if flag
     	result
@@ -941,6 +987,67 @@ SIDE EFFECTS:
     );if
   );let
 );;get-next-n-words-with-ignore-list
+
+;; Tests:
+(ert-deftest get-next-n-words-with-ignore-list-test ()
+"Here, we test the function get-next-n-words with-ignore-list. The
+covered test cases are:
+1. empty file, empty ignore list.
+2. empty file, non-empty ignore list.
+3. non-empty file, empty ignore list.
+4. non-empty file, non-empty ignore-list border case producing a
+   non-empty string.
+5. non-empty file, non-empty ingnore-list border case producing an
+   empty string.
+6. non-empty file, non-empty ignore-list non-border case producing a
+   non-empty string.
+7. non-empty file, non-empty ignore-list non-border case producing an
+   empty string.
+8. Whole buffer is ignored."
+  ;1.
+  (set-buffer (find-file "./test_files/empty_test_buffer.txt"))
+  (should (equal (get-next-n-words-with-ignore-list 50 1 nil) ""))
+  (kill-buffer "empty_test_buffer.txt")
+  ;2.
+  (set-buffer (find-file "./test_files/empty_test_buffer.txt"))
+  (should (equal (get-next-n-words-with-ignore-list 50 1 '((0 50) (70 100))) ""))
+  (kill-buffer "empty_test_buffer.txt")
+  ;3.
+  (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
+  (should (equal (get-next-n-words-with-ignore-list 50 1 nil) ""))
+  (kill-buffer "test_buffer_3_words.txt")
+  ;4.
+  (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
+  (should (equal (get-next-n-words-with-ignore-list 2 1 '((1 6)))
+		 "ipsum dolor.\n"))
+  (kill-buffer "test_buffer_3_words.txt")
+  ;5.
+  (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
+  (should (equal (get-next-n-words-with-ignore-list 3 1 '((13 18)))
+		 ""))
+  (kill-buffer "test_buffer_3_words.txt")
+  ;6.
+  (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
+  (should (equal (get-next-n-words-with-ignore-list 10 1 
+						    '((1 6) (13 18)
+						      (117 136)))
+		 "ipsum sit amet, consetetur sadipscing elitr, sed diam
+nonumy eirmod "))
+  (kill-buffer "test_buffer_50_words.txt")
+  ;7.
+  (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
+  (should (equal (get-next-n-words-with-ignore-list 50 1 
+						    '((1 6) (13 18)
+						      (117 136)))
+		 ""))
+  (kill-buffer "test_buffer_50_words.txt")
+  ;8.
+  (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
+  (should (equal (get-next-n-words-with-ignore-list 20 1 
+						    '((1 296)))
+		 ""))
+  (kill-buffer "test_buffer_50_words.txt")
+);get-next-n-words-with-ignore-list-test
 
 ;(get-next-n-words-with-ignore-list 100 1 '((1 2000) (3000 4000)))
 
