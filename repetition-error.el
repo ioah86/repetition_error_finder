@@ -154,6 +154,13 @@
 ;;   - Added tests for get-next-n-words-with-ignore-list
 ;;   - rewrite of the function get-next-n-words-with-ignore-list to
 ;;     catch some special cases
+;;- Mo 12. Okt 18:15:25 EDT 2015:
+;;   - Added tests for create-ignore-list-for-latex-buffer.
+;;   - Altered the function create-ignore-list-for-latex-buffer to not
+;;     return intervals that overlap.
+;;   - Altered the function create-ignore-list-for-latex-buffer to
+;;     use more regular expressions to get more short.
+
 
 
 ;;; CODE:
@@ -796,6 +803,19 @@ GENERAL ASSUMPTIONS:
 				 "[\\]begin{align[\*]?}\\(.\\|\n\\)+?[\\]end{align[\*]?}")))
     (setq result (append result (create-ignore-list-by-regexp
 				 "%.*?$")))
+    (setq result (append result (create-ignore-list-by-regexp
+				 "[\\][(]\\(.\\|\n\\)+?[\\][)]")))
+    (setq result (append result 
+			 (mapcar
+			  (lambda (m) (cons (+ 1 (first m)) (cons
+							      (second
+							       m) '())))
+			  (create-ignore-list-by-regexp
+			   "[^\\][\\]\\[\\(.\\|\n\\)+?[\\]\\]"))))
+    ;;In the line before: We needed to remove the case \\[12pt] e.g.,
+    ;;which is covered by the next case.
+    (setq result (append result (create-ignore-list-by-regexp
+				 "[\\][\\]\\[[0-9]+[[:alpha:]]*?\\]")))
     (while (< curpos (point-max))
       (setq foundFlag nil)
       (if (and 
@@ -803,6 +823,7 @@ GENERAL ASSUMPTIONS:
 	   (equal (string-match "[a-zA-Z0-9]"
 				(string (char-after (+ 1 curpos))))
 		  0)
+	   (not (is-point-in-ignore-list curpos result))
 	  );and
         ;;In this case, we have encountered a command; it can be of
 	;;the form \.* or \begin{.*}
@@ -821,36 +842,10 @@ GENERAL ASSUMPTIONS:
 	  (setq result (cons (cons newEntryL (cons newEntryR ())) result))
         );progn
       );if
-      (if (and 
-	   (equal (string (char-after curpos)) "\\")
-	   (or
-	    (equal "[" (string (char-after (+ 1 curpos))))
-	    (equal "(" (string (char-after (+ 1 curpos))))
-	   );or
-	   (not (equal (string (char-before curpos)) "\\"));; This
-	   ;; catches the newlines that have a distance written with
-	   ;; them, like e.g. \\[12pt]
-	  );and
-        ;;In this case, we have encountered math-mode via \[\] or \(\)
-        (progn
-	  (setq foundFlag t)
-	  (setq newEntryL curpos)
-	  (setq curpos (+ curpos 1))
-	  (while (and
-		  (not (equal (string (char-after curpos)) "\\"))
-		  (or
-		   (not (equal "]" (string (char-after (+ 1 curpos)))))
-		   (not (equal ")" (string (char-after (+ 1 curpos)))))
-		  );or
-		 );and
-	    (setq curpos (+ curpos 1))
-	  );while
-	  (setq curpos (+ 1 curpos))
-	  (setq newEntryR curpos)
-	  (setq result (cons (cons newEntryL (cons newEntryR ())) result))
-        );progn
-      );if
-      (if (equal (string (char-after curpos)) "$")
+      (if (and
+	    (equal (string (char-after curpos)) "$")
+	    (not (is-point-in-ignore-list curpos result))
+	  );;and
 	;;In this case, we have math mode initialized by $
 	  (let
 	    (;let definitions
@@ -880,9 +875,35 @@ GENERAL ASSUMPTIONS:
 	  (setq curpos (+ 1 curpos))
       );if
     );while
-    (sort (reverse result) (lambda (x y) (<= (first x) (first y))))
+    (sort result (lambda (x y) (<= (first x) (first y))))
   );let
 );create-ignore-list-for-latex-buffer ()
+
+;; Tests
+(ert-deftest create-ignore-list-for-latex-buffer-test ()
+"Here, we test the function create-ignore-list-for-latex-buffer.
+The test cases are the following:
+1. empty buffer.
+2. Buffer with no LaTeX in it.
+3. Valid LaTeX-Buffer, containing all the ignored LaTeX constructs."
+  ;1.
+  (set-buffer (find-file "./test_files/empty_test_buffer.txt"))
+  (should (equal (create-ignore-list-for-latex-buffer) nil))
+  (kill-buffer "empty_test_buffer.txt")
+  ;2.
+  (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
+  (should (equal (create-ignore-list-for-latex-buffer) nil))
+  (kill-buffer "test_buffer_50_words.txt")
+  ;3.
+  (set-buffer (find-file "./test_files/latex_test_file.tex"))
+  (should (equal (create-ignore-list-for-latex-buffer)
+		 '((1 66) (67 134) (135 197) (198 261) (262 328)
+		   (329 391) (392 458) (459 521) (522 580) (581 647)
+		   (648 659) (661 724) (726 787) (809 872) (912 926)
+		   (1008 1018) (1103 1144) (1178 1199) (1199 1207)
+		   (1238 1250))))
+  (kill-buffer "latex_test_file.tex")
+);create-ignore-list-for-latex-buffer-test
 
 (defun is-point-in-ignore-list (p ign)
 "Integer->listof (Integer Integer)->(Integer Integer)
@@ -1048,8 +1069,6 @@ nonumy eirmod "))
 		 ""))
   (kill-buffer "test_buffer_50_words.txt")
 );get-next-n-words-with-ignore-list-test
-
-;(get-next-n-words-with-ignore-list 100 1 '((1 2000) (3000 4000)))
 
 (defun exceeders (str number)
 "string->integer->listof (list string integer)
