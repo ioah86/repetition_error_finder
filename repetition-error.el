@@ -163,6 +163,14 @@
 ;;- Fr 23. Okt 23:22:41 EDT 2015:
 ;;   - Finished the tests for create-ignore-list-for-latex-buffer
 ;;   - Altered the function to catch different cases of commands
+;;- Sa 24. Okt 15:48:41 EDT 2015:
+;;   - debunked create-ignore-list-for-latex-buffer
+;;   - Changed the use of get-next-n-words (with and without
+;;     repetition error. Not it returns a list containing the start
+;;     and the end point, besides the word-block.
+;;   - according to the above change, certain lines of
+;;     find-repetition-error had to be altered.
+
 
 
 
@@ -372,14 +380,22 @@ ASSUMPTIONS:
 	    (setq curWordBlock (get-next-n-words-with-ignore-list nWords (point) ignlist))
 	);if
 	(if
-	  (equal curWordBlock "")
+	  (equal (first curWordBlock) "")
 	  (progn
 	    (setq flag nil)
 	    "Reached the end of the buffer"
 	  );progn for then
 		;else
-	  (setq exc (filter-known-words tempKnownsList (exceeders curWordBlock minRep) (point) (+ (point) (string-width curWordBlock))))
-	  (setq tempKnownsList (update-knowns-list tempKnownsList exc (point) (+ (point) (string-width curWordBlock))))
+	  (setq exc (filter-known-words tempKnownsList
+					(exceeders
+					 (first curWordBlock)
+					 minRep)
+					(second curWordBlock)
+					(third curWordBlock)))
+	  (setq tempKnownsList
+		(update-knowns-list tempKnownsList exc
+				    (second curWordBlock)
+				    (third curWordBlock)))
 	  (if (equal exc ())
 	      (progn
 		(re-search-forward "[[:space:]\n]" end t)
@@ -624,12 +640,15 @@ following:
 );test-filter-known-words
 
 (defun get-next-n-words-from-point (n p)
-"Integer->Integer->string
+"Integer->Integer->(list string Integer Integer)
 Given an integer n and an integer p. The parameter p represents a
 position in the buffer, n represents a number of words we want to
-extract. This function returns a string containing the next n words
-from point p in the buffer, if available. If there are no n words,
-then the function returns the empty string.
+extract. This function returns a three tuple, containing:
+- a string containing the next n words from point p in the buffer, if
+  available. If there are no n words, then the function returns the
+  empty string.
+- p itself
+- the position when this string ends in the buffer
 ASSUMPTIONS:
  - The point p is at the beginning of a word
 SIDE EFFECTS:
@@ -654,8 +673,8 @@ SIDE EFFECTS:
     (setq curpos (point))
     (goto-char p)
     (if flag
-	(buffer-substring-no-properties p curpos)
-        ""
+	(list (buffer-substring-no-properties p curpos) p curpos)
+        (list "" p curpos)
     );if
   );let
 );;get-next-n-words-from-point
@@ -675,36 +694,38 @@ Our test suite contains the following test-cases:
 "
   ;1.
   (set-buffer (find-file "./test_files/empty_test_buffer.txt"))
-  (should (equal (get-next-n-words-from-point 100 1) ""))
+  (should (equal (get-next-n-words-from-point 100 1) (list "" 1 1)))
   (kill-buffer "empty_test_buffer.txt")
   ;2.
   (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
-  (should (equal (get-next-n-words-from-point 3 1) "Lorem ipsum dolor.\n"))
+  (should (equal (get-next-n-words-from-point 3 1) (list "Lorem ipsum \
+dolor.\n" 1 20)))
   (kill-buffer "test_buffer_3_words.txt")
   ;3.
   (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
-  (should (equal (get-next-n-words-from-point 4 1) ""))
+  (should (equal (get-next-n-words-from-point 4 1) (list "" 1 20)))
   (kill-buffer "test_buffer_3_words.txt")
   ;4.
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
-  (should (equal (get-next-n-words-from-point 50 1) "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam
+  (should (equal (get-next-n-words-from-point 50 1) (list "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam
 nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat,
 sed diam voluptua. At vero eos et accusam et justo duo dolores et ea
 rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem
 ipsum dolor sit amet.
-"))
+" 1 297)))
   (kill-buffer "test_buffer_50_words.txt")
   ;5.
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
-  (should (equal (get-next-n-words-from-point 51 1) ""))
+  (should (equal (get-next-n-words-from-point 51 1) (list "" 1 297)))
   (kill-buffer "test_buffer_50_words.txt")
   ;6.
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
-  (should (equal (get-next-n-words-from-point 100 1) ""))
+  (should (equal (get-next-n-words-from-point 100 1) (list "" 1 297)))
   (kill-buffer "test_buffer_50_words.txt")
   ;7.
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
-  (should (equal (get-next-n-words-from-point 3 1) "Lorem ipsum dolor "))
+  (should (equal (get-next-n-words-from-point 3 1) (list "Lorem ipsum \
+dolor " 1 19)))
   (kill-buffer "test_buffer_50_words.txt")
 );get-next-n-words-from-point-test
 
@@ -801,24 +822,27 @@ GENERAL ASSUMPTIONS:
       (newEntryR 0)
       (foundFlag nil)
     );let definitions
-    (setq result (append result (create-ignore-list-by-regexp
-				 "[\\]begin{eqnarray[\*]?}\\(.\\|\n\\)+?[\\]end{eqnarray[\*]?}")))
-    (setq result (append result (create-ignore-list-by-regexp
-				 "[\\]begin{align[\*]?}\\(.\\|\n\\)+?[\\]end{align[\*]?}")))
-    (setq result (append result (remove-if 
-				 (lambda (x)
-				   (is-point-in-ignore-list
-				    (first x) result)) (create-ignore-list-by-regexp
-					       "[\\]begin{.+?}"))))
-    (setq result (append result (remove-if 
-				 (lambda (x)
-				   (is-point-in-ignore-list
-				    (first x) result)) (create-ignore-list-by-regexp
-					       "[\\]end{.+?}"))))
+    ;;comments
     (setq result (append result (create-ignore-list-by-regexp
 				 "%.*?$")))
+    ;;begin/end eqnarray
+    (setq result (append result (remove-if 
+				 (lambda (x)
+				   (is-point-in-ignore-list
+				    (first x) result)) 
+				 (create-ignore-list-by-regexp
+				  "[\\]begin{eqnarray[\*]?}\\(.\\|\n\\)+?[\\]end{eqnarray[\*]?}"))))
+    ;;begin/end align
+    (setq result (append result (remove-if 
+				 (lambda (x)
+				   (is-point-in-ignore-list
+				    (first x) result))
+				 (create-ignore-list-by-regexp
+				  "[\\]begin{align[\*]?}\\(.\\|\n\\)+?[\\]end{align[\*]?}"))))
+    ;;math notations a la \( ... \)
     (setq result (append result (create-ignore-list-by-regexp
 				 "[\\][(]\\(.\\|\n\\)+?[\\][)]")))
+    ;;math notations a la \[ ... \]
     (setq result (append result 
 			 (mapcar
 			  (lambda (m) (cons (+ 1 (first m)) (cons
@@ -832,30 +856,30 @@ GENERAL ASSUMPTIONS:
 				 "[\\][\\]\\[[0-9]+[[:alpha:]]*?\\]")))
     (while (< curpos (point-max))
       (setq foundFlag nil)
-      (if (and 
-	   (equal (string (char-after curpos)) "\\")
-	   (equal (string-match "[a-zA-Z0-9]"
-				(string (char-after (+ 1 curpos))))
-		  0)
-	   (not (is-point-in-ignore-list curpos result))
-	  );and
-        ;;In this case, we have encountered a command; it can be of
-	;;the form \.*
-        (progn
-	  (setq foundFlag t)
-	  (setq newEntryL curpos)
-	  (setq curpos (+ curpos 1))
-	  (while (and
-		   (equal (string-match "\\([a-zA-Z0-9]\\|\\[\\|\\]\\)"
-			       (string (char-after curpos))) 0)
-		   (< curpos (- (point-max) 1))
-		 )
-	    (setq curpos (+ curpos 1))
-	  );while
-	  (setq newEntryR curpos)
-	  (setq result (cons (cons newEntryL (cons newEntryR ())) result))
-        );progn
-      );if
+      ;; (if (and 
+      ;; 	   (equal (string (char-after curpos)) "\\")
+      ;; 	   (equal (string-match "[a-zA-Z0-9]"
+      ;; 				(string (char-after (+ 1 curpos))))
+      ;; 		  0)
+      ;; 	   (not (is-point-in-ignore-list curpos result))
+      ;; 	  );and
+      ;;   ;;In this case, we have encountered a command; it can be of
+      ;; 	;;the form \.*
+      ;;   (progn
+      ;; 	  (setq foundFlag t)
+      ;; 	  (setq newEntryL curpos)
+      ;; 	  (setq curpos (+ curpos 1))
+      ;; 	  (while (and
+      ;; 		   (equal (string-match "\\([a-zA-Z0-9]\\|\\[\\|\\]\\)"
+      ;; 			       (string (char-after curpos))) 0)
+      ;; 		   (< curpos (- (point-max) 1))
+      ;; 		 )
+      ;; 	    (setq curpos (+ curpos 1))
+      ;; 	  );while
+      ;; 	  (setq newEntryR curpos)
+      ;; 	  (setq result (cons (cons newEntryL (cons newEntryR ())) result))
+      ;;   );progn
+      ;; );if
       (if (and
 	    (equal (string (char-after curpos)) "$")
 	    (not (is-point-in-ignore-list curpos result))
@@ -889,6 +913,23 @@ GENERAL ASSUMPTIONS:
 	  (setq curpos (+ 1 curpos))
       );if
     );while
+    ;;begin{...} in general
+    (setq result (append result (remove-if 
+				 (lambda (x)
+				   (is-point-in-ignore-list
+				    (first x) result)) (create-ignore-list-by-regexp
+					       "[\\]begin{.+?}"))))
+    ;;end{...} in general
+    (setq result (append result (remove-if 
+				 (lambda (x)
+				   (is-point-in-ignore-list
+				    (first x) result)) (create-ignore-list-by-regexp
+					       "[\\]end{.+?}"))))
+    (setq result (append result (remove-if 
+				 (lambda (x)
+				   (is-point-in-ignore-list
+				    (first x) result)) (create-ignore-list-by-regexp
+					       "[\\]\\([[:alnum:]]\\|\\[\\|\\]\\|\\)+"))))
     (sort result (lambda (x y) (<= (first x) (first y))))
   );let
 );create-ignore-list-for-latex-buffer ()
@@ -967,16 +1008,17 @@ The test-cases are the following:
 
 
 (defun get-next-n-words-with-ignore-list (n p ign)
-"Integer->Integer->listof (list int int)->string
+"Integer->Integer->listof (list int int)->(list string Int Int)
 Given an integer n, an integer p, and a list of integer tuples ign.
 The parameter p represents a
 position in the buffer, n represents a number of words we want to
-extract. This function returns a string containing the next n words
-from point p in the buffer, if available. If for a tuple (i j) in
-ignore, a word appears at position somewhere between i and j, it will
-be ignored.
-If there are no n words,
-then the function returns the empty string.
+extract. This function returns a tuple containing
+- a string containing the next n words from point p in the buffer, if
+  available. If for a tuple (i j) in ignore, a word appears at
+  position somewhere between i and j, it will be ignored.
+  If there are no n words, then there will be the empty string here
+- the point p
+- and the position where the string ended
 ASSUMPTIONS:
  - The point p is at the beginning of a word
  - The beginning of a regexp is found after p, not before.
@@ -1016,11 +1058,11 @@ SIDE EFFECTS:
 	  );progn
       );if
     );while
-    ;; (setq curpos (point))
+    (setq curpos (point))
     (goto-char p)
     (if flag
-    	result
-        ""
+    	(list result p curpos)
+        (list "" p curpos)
     );if
   );let
 );;get-next-n-words-with-ignore-list
@@ -1043,46 +1085,50 @@ covered test cases are:
 8. Whole buffer is ignored."
   ;1.
   (set-buffer (find-file "./test_files/empty_test_buffer.txt"))
-  (should (equal (get-next-n-words-with-ignore-list 50 1 nil) ""))
+  (should (equal (get-next-n-words-with-ignore-list 50 1 nil) (list ""
+								    1 1)))
   (kill-buffer "empty_test_buffer.txt")
   ;2.
   (set-buffer (find-file "./test_files/empty_test_buffer.txt"))
-  (should (equal (get-next-n-words-with-ignore-list 50 1 '((0 50) (70 100))) ""))
+  (should (equal (get-next-n-words-with-ignore-list 50 1 '((0 50) (70
+								   100)))
+		 (list "" 1 1)))
   (kill-buffer "empty_test_buffer.txt")
   ;3.
   (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
-  (should (equal (get-next-n-words-with-ignore-list 50 1 nil) ""))
+  (should (equal (get-next-n-words-with-ignore-list 50 1 nil) (list ""
+								    1 20)))
   (kill-buffer "test_buffer_3_words.txt")
   ;4.
   (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
   (should (equal (get-next-n-words-with-ignore-list 2 1 '((1 6)))
-		 "ipsum dolor.\n"))
+		 (list "ipsum dolor.\n" 1 20)))
   (kill-buffer "test_buffer_3_words.txt")
   ;5.
   (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
   (should (equal (get-next-n-words-with-ignore-list 3 1 '((13 18)))
-		 ""))
+		 (list "" 1 20)))
   (kill-buffer "test_buffer_3_words.txt")
   ;6.
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
   (should (equal (get-next-n-words-with-ignore-list 10 1 
 						    '((1 6) (13 18)
 						      (117 136)))
-		 "ipsum sit amet, consetetur sadipscing elitr, sed diam
-nonumy eirmod "))
+		 (list "ipsum sit amet, consetetur sadipscing elitr, sed diam
+nonumy eirmod " 1 81)))
   (kill-buffer "test_buffer_50_words.txt")
   ;7.
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
   (should (equal (get-next-n-words-with-ignore-list 50 1 
 						    '((1 6) (13 18)
 						      (117 136)))
-		 ""))
+		 (list "" 1 297)))
   (kill-buffer "test_buffer_50_words.txt")
   ;8.
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
   (should (equal (get-next-n-words-with-ignore-list 20 1 
 						    '((1 296)))
-		 ""))
+		 (list "" 1 297)))
   (kill-buffer "test_buffer_50_words.txt")
 );get-next-n-words-with-ignore-list-test
 
