@@ -160,6 +160,10 @@
 ;;     return intervals that overlap.
 ;;   - Altered the function create-ignore-list-for-latex-buffer to
 ;;     use more regular expressions to get more short.
+;;- Fr 23. Okt 23:22:41 EDT 2015:
+;;   - Finished the tests for create-ignore-list-for-latex-buffer
+;;   - Altered the function to catch different cases of commands
+
 
 
 
@@ -780,8 +784,8 @@ our find-repetition-error routines, assuming that the current document
 is a LaTeX file. In particular, this function will detect matches to
 the following expressions and ignore them:
 - Math-modes (\[.*\], \(.*\), $.*$, $$.*$$)
-- \begin{.*} and \end{.*} 
-- \.* in general (commands)
+- \begin{.+} and \end{.+} 
+- \[a-zA-Z0-9]+[{]? in general (commands)
 - math modes a la \begin{eqnarray[*]} .. \end{eqnarray[*]} or
   \begin{align*} .. \end{align{*}}
 - Comments beginning with '%' and going until the end of the line
@@ -801,6 +805,16 @@ GENERAL ASSUMPTIONS:
 				 "[\\]begin{eqnarray[\*]?}\\(.\\|\n\\)+?[\\]end{eqnarray[\*]?}")))
     (setq result (append result (create-ignore-list-by-regexp
 				 "[\\]begin{align[\*]?}\\(.\\|\n\\)+?[\\]end{align[\*]?}")))
+    (setq result (append result (remove-if 
+				 (lambda (x)
+				   (is-point-in-ignore-list
+				    (first x) result)) (create-ignore-list-by-regexp
+					       "[\\]begin{.+?}"))))
+    (setq result (append result (remove-if 
+				 (lambda (x)
+				   (is-point-in-ignore-list
+				    (first x) result)) (create-ignore-list-by-regexp
+					       "[\\]end{.+?}"))))
     (setq result (append result (create-ignore-list-by-regexp
 				 "%.*?$")))
     (setq result (append result (create-ignore-list-by-regexp
@@ -811,7 +825,7 @@ GENERAL ASSUMPTIONS:
 							      (second
 							       m) '())))
 			  (create-ignore-list-by-regexp
-			   "[^\\][\\]\\[\\(.\\|\n\\)+?[\\]\\]"))))
+			   "\\([^\\]\\|^\\)[\\]\\[\\(.\\|\n\\)+?[\\]\\]"))))
     ;;In the line before: We needed to remove the case \\[12pt] e.g.,
     ;;which is covered by the next case.
     (setq result (append result (create-ignore-list-by-regexp
@@ -826,13 +840,13 @@ GENERAL ASSUMPTIONS:
 	   (not (is-point-in-ignore-list curpos result))
 	  );and
         ;;In this case, we have encountered a command; it can be of
-	;;the form \.* or \begin{.*}
+	;;the form \.*
         (progn
 	  (setq foundFlag t)
 	  (setq newEntryL curpos)
 	  (setq curpos (+ curpos 1))
 	  (while (and
-		   (equal (string-match "\\([a-zA-Z0-9{}]\\|\\[\\|\\]\\)"
+		   (equal (string-match "\\([a-zA-Z0-9]\\|\\[\\|\\]\\)"
 			       (string (char-after curpos))) 0)
 		   (< curpos (- (point-max) 1))
 		 )
@@ -901,7 +915,9 @@ The test cases are the following:
 		   (329 391) (392 458) (459 521) (522 580) (581 647)
 		   (648 659) (661 724) (726 787) (809 872) (912 926)
 		   (1008 1018) (1103 1144) (1178 1199) (1199 1207)
-		   (1238 1250))))
+		   (1238 1250) (1252 1267) (1268 1273) (1283 1288)
+		   (1298 1303) (1313 1318) (1328 1333) (1343 1348)
+		   (1358 1371) (1373 1381) (1408 1418))))
   (kill-buffer "latex_test_file.tex")
 );create-ignore-list-for-latex-buffer-test
 
