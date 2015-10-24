@@ -170,9 +170,13 @@
 ;;     and the end point, besides the word-block.
 ;;   - according to the above change, certain lines of
 ;;     find-repetition-error had to be altered.
-
-
-
+;;- Sa 24. Okt 19:27:45 EDT 2015:
+;;   - Altered the function get-next-n-words to also return a string
+;;     in case not n words are available. It makes more sense in our
+;;     context.
+;;   - Made find-repetition-error more efficient by deleting from the
+;;     ignore list, if available, anything where the point cannot be in
+;;     any more.
 
 
 ;;; CODE:
@@ -368,16 +372,8 @@ ASSUMPTIONS:
 	(if (not ignlist)
 	    (setq curWordBlock (get-next-n-words-from-point nWords (point)))
 	    ;else
-	    ;; (while (and
-	    ;; 	     (not (equal ignlist nil))
-	    ;; 	     (< (first (first ignlist)) (point))
-	    ;; 	   );and
-	    ;;   ;in this loop, we will remove unnecessary entries in
-	    ;;   ;ignlist, to reduce the complexity when executing
-	    ;;   ;get-next-n-words-with-ignore-list
-	    ;;   (setq ignlist (rest ignlist))
-	    ;; );while
-	    (setq curWordBlock (get-next-n-words-with-ignore-list nWords (point) ignlist))
+	  (setq ignlist (remove-if (lambda (x) (< (second x) (point))) ignlist))
+	  (setq curWordBlock (get-next-n-words-with-ignore-list nWords (point) ignlist))
 	);if
 	(if
 	  (equal (first curWordBlock) "")
@@ -407,15 +403,7 @@ ASSUMPTIONS:
 		  ;;in this case, we can move even further
 		  (if (is-point-in-ignore-list (point) ignlist)
 		    (progn
-		      ;; (while (and
-		      ;;     (not (equal ignlist nil))
-		      ;;     (< (first (first ignlist)) (point))
-		      ;;   );and
-		      ;;   ;in this loop, we will remove unnecessary entries in
-	              ;;   ;ignlist, to reduce the complexity when executing
-	              ;;   ;get-next-n-words-with-ignore-list
-	              ;;   (setq ignlist (rest ignlist))
-	              ;; );while
+		      (setq ignlist (remove-if (lambda (x) (< (second x) (point))) ignlist))
 		      (goto-char (second (is-point-in-ignore-list
 					  (point) ignlist)))
 		      (recenter 0)
@@ -451,15 +439,7 @@ ASSUMPTIONS:
 	      ;;in this case, we can move even further
 	      (if (is-point-in-ignore-list (point) ignlist)
 	        (progn
-	          ;; (while (and
-	          ;;     (not (equal ignlist nil))
-	          ;;     (< (first (first ignlist)) (point))
-	          ;;   );and
-	          ;;   ;in this loop, we will remove unnecessary entries in
-	          ;;   ;ignlist, to reduce the complexity when executing
-	          ;;   ;get-next-n-words-with-ignore-list
-	          ;;   (setq ignlist (rest ignlist))
-	          ;; );while
+		  (setq ignlist (remove-if (lambda (x) (< (second x) (point))) ignlist))
 	          (goto-char (second (is-point-in-ignore-list (point) ignlist)))
 	          (recenter 0)
 	          (if (> (point) end)
@@ -645,8 +625,8 @@ Given an integer n and an integer p. The parameter p represents a
 position in the buffer, n represents a number of words we want to
 extract. This function returns a three tuple, containing:
 - a string containing the next n words from point p in the buffer, if
-  available. If there are no n words, then the function returns the
-  empty string.
+  available. If there are no n words, then the function returns what
+  is available.
 - p itself
 - the position when this string ends in the buffer
 ASSUMPTIONS:
@@ -672,10 +652,10 @@ SIDE EFFECTS:
     );while
     (setq curpos (point))
     (goto-char p)
-    (if flag
-	(list (buffer-substring-no-properties p curpos) p curpos)
-        (list "" p curpos)
-    );if
+    ;(if flag
+    (list (buffer-substring-no-properties p curpos) p curpos)
+    ;(list "" p curpos)
+    ;);if
   );let
 );;get-next-n-words-from-point
 
@@ -683,13 +663,13 @@ SIDE EFFECTS:
 "Here, we test the function get-next-n-words-from-point.
 Our test suite contains the following test-cases:
 1. An empty buffer
-2. Boundary case for number of words with boundary that will produce
-   text.
-3. Boundary case for number of words with boundary that will not
-   produce text.
-4. Large text, boundary case producing text.
-5. Large text, boundary case not producing text.
-6. Large text, non-boundary case not producing text.
+2. Boundary case for number of words with boundary that has the exact
+   number of words available
+3. Boundary case for number of words with boundary that goes over the
+   number of available words.
+4. Large text, boundary case with exact number of words.
+5. Large text, boundary case with more words asked for than available.
+6. Large text, non-boundary case with way more words asked for than available.
 7. Large text, non-boundary case producing text.
 "
   ;1.
@@ -703,7 +683,8 @@ dolor.\n" 1 20)))
   (kill-buffer "test_buffer_3_words.txt")
   ;3.
   (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
-  (should (equal (get-next-n-words-from-point 4 1) (list "" 1 20)))
+  (should (equal (get-next-n-words-from-point 4 1) (list "Lorem ipsum \
+dolor.\n" 1 20)))
   (kill-buffer "test_buffer_3_words.txt")
   ;4.
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
@@ -716,11 +697,21 @@ ipsum dolor sit amet.
   (kill-buffer "test_buffer_50_words.txt")
   ;5.
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
-  (should (equal (get-next-n-words-from-point 51 1) (list "" 1 297)))
+  (should (equal (get-next-n-words-from-point 51 1) (list "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam
+nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat,
+sed diam voluptua. At vero eos et accusam et justo duo dolores et ea
+rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem
+ipsum dolor sit amet.
+" 1 297)))
   (kill-buffer "test_buffer_50_words.txt")
   ;6.
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
-  (should (equal (get-next-n-words-from-point 100 1) (list "" 1 297)))
+  (should (equal (get-next-n-words-from-point 100 1) (list "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam
+nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat,
+sed diam voluptua. At vero eos et accusam et justo duo dolores et ea
+rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem
+ipsum dolor sit amet.
+" 1 297)))
   (kill-buffer "test_buffer_50_words.txt")
   ;7.
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
@@ -856,30 +847,6 @@ GENERAL ASSUMPTIONS:
 				 "[\\][\\]\\[[0-9]+[[:alpha:]]*?\\]")))
     (while (< curpos (point-max))
       (setq foundFlag nil)
-      ;; (if (and 
-      ;; 	   (equal (string (char-after curpos)) "\\")
-      ;; 	   (equal (string-match "[a-zA-Z0-9]"
-      ;; 				(string (char-after (+ 1 curpos))))
-      ;; 		  0)
-      ;; 	   (not (is-point-in-ignore-list curpos result))
-      ;; 	  );and
-      ;;   ;;In this case, we have encountered a command; it can be of
-      ;; 	;;the form \.*
-      ;;   (progn
-      ;; 	  (setq foundFlag t)
-      ;; 	  (setq newEntryL curpos)
-      ;; 	  (setq curpos (+ curpos 1))
-      ;; 	  (while (and
-      ;; 		   (equal (string-match "\\([a-zA-Z0-9]\\|\\[\\|\\]\\)"
-      ;; 			       (string (char-after curpos))) 0)
-      ;; 		   (< curpos (- (point-max) 1))
-      ;; 		 )
-      ;; 	    (setq curpos (+ curpos 1))
-      ;; 	  );while
-      ;; 	  (setq newEntryR curpos)
-      ;; 	  (setq result (cons (cons newEntryL (cons newEntryR ())) result))
-      ;;   );progn
-      ;; );if
       (if (and
 	    (equal (string (char-after curpos)) "$")
 	    (not (is-point-in-ignore-list curpos result))
@@ -1060,10 +1027,10 @@ SIDE EFFECTS:
     );while
     (setq curpos (point))
     (goto-char p)
-    (if flag
+    ;(if flag
     	(list result p curpos)
-        (list "" p curpos)
-    );if
+    ;    (list "" p curpos)
+    ;);if
   );let
 );;get-next-n-words-with-ignore-list
 
@@ -1074,14 +1041,14 @@ covered test cases are:
 1. empty file, empty ignore list.
 2. empty file, non-empty ignore list.
 3. non-empty file, empty ignore list.
-4. non-empty file, non-empty ignore-list border case producing a
-   non-empty string.
-5. non-empty file, non-empty ingnore-list border case producing an
-   empty string.
-6. non-empty file, non-empty ignore-list non-border case producing a
-   non-empty string.
-7. non-empty file, non-empty ignore-list non-border case producing an
-   empty string.
+4. non-empty file, non-empty ignore-list border case with exactly the
+   number of words we are asking for.
+5. non-empty file, non-empty ingnore-list border case with one more
+   word asked for than available.
+6. non-empty file, non-empty ignore-list non-border case having more
+   words available than asked for.
+7. non-empty file, non-empty ignore-list non-border case asking for
+   more words than available.
 8. Whole buffer is ignored."
   ;1.
   (set-buffer (find-file "./test_files/empty_test_buffer.txt"))
@@ -1096,8 +1063,8 @@ covered test cases are:
   (kill-buffer "empty_test_buffer.txt")
   ;3.
   (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
-  (should (equal (get-next-n-words-with-ignore-list 50 1 nil) (list ""
-								    1 20)))
+  (should (equal (get-next-n-words-with-ignore-list 50 1 nil)
+		 (list "Lorem ipsum dolor.\n" 1 20)))
   (kill-buffer "test_buffer_3_words.txt")
   ;4.
   (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
@@ -1107,7 +1074,7 @@ covered test cases are:
   ;5.
   (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
   (should (equal (get-next-n-words-with-ignore-list 3 1 '((13 18)))
-		 (list "" 1 20)))
+		 (list "Lorem ipsum " 1 20)))
   (kill-buffer "test_buffer_3_words.txt")
   ;6.
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
@@ -1122,7 +1089,8 @@ nonumy eirmod " 1 81)))
   (should (equal (get-next-n-words-with-ignore-list 50 1 
 						    '((1 6) (13 18)
 						      (117 136)))
-		 (list "" 1 297)))
+		 (list "ipsum sit amet, consetetur sadipscing elitr, sed diam
+nonumy eirmod tempor invidunt ut labore et dolore sed diam voluptua. At vero eos et accusam et justo duo dolores et ea\nrebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem\nipsum dolor sit amet.\n" 1 297)))
   (kill-buffer "test_buffer_50_words.txt")
   ;8.
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
