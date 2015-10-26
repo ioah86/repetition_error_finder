@@ -177,6 +177,14 @@
 ;;   - Made find-repetition-error more efficient by deleting from the
 ;;     ignore list, if available, anything where the point cannot be in
 ;;     any more.
+;;- So 25. Okt 19:57:26 EDT 2015:
+;;   - Removed the "efficiency" in find-repetition-error, as it was
+;;     not more efficient than before; however, we are going to
+;;     revisit that topic later.
+;;   - Made an efficiency improve in other areas. Still very slow on
+;;     some latex-files.
+
+
 
 
 ;;; CODE:
@@ -372,11 +380,11 @@ ASSUMPTIONS:
 	(if (not ignlist)
 	    (setq curWordBlock (get-next-n-words-from-point nWords (point)))
 	    ;else
-	  (setq ignlist (remove-if (lambda (x) (< (second x) (point))) ignlist))
+	  ;(setq ignlist (remove-if (lambda (x) (< (second x) (point))) ignlist))
 	  (setq curWordBlock (get-next-n-words-with-ignore-list nWords (point) ignlist))
 	);if
 	(if
-	  (equal (first curWordBlock) "")
+	  (>= (third curWordBlock) end)
 	  (progn
 	    (setq flag nil)
 	    "Reached the end of the buffer"
@@ -394,24 +402,24 @@ ASSUMPTIONS:
 				    (third curWordBlock)))
 	  (if (equal exc ())
 	      (progn
-		(re-search-forward "[[:space:]\n]" end t)
+		(re-search-forward "[[:space:]\n]+" end t)
 		(recenter 0)
 		(if (> (point) end)
 		  (setq flag nil)
 		);if
 		(if ignlist
 		  ;;in this case, we can move even further
-		  (if (is-point-in-ignore-list (point) ignlist)
-		    (progn
-		      (setq ignlist (remove-if (lambda (x) (< (second x) (point))) ignlist))
-		      (goto-char (second (is-point-in-ignore-list
-					  (point) ignlist)))
+		  (while (is-point-in-ignore-list (point) ignlist)
+		    ;(progn
+		      ;(setq ignlist (remove-if (lambda (x) (< (second x) (point))) ignlist))
+		      (goto-char (+ 1 (second (is-point-in-ignore-list
+					  (point) ignlist))))
 		      (recenter 0)
 		      (if (> (point) end)
 		        (setq flag nil)
 		      );if
-		    );progn
-		  );if
+		    ;);progn
+		  );while
 		);if
 	      );progn
 		;else
@@ -430,23 +438,23 @@ ASSUMPTIONS:
 		);progn
 	      );if
 	    );while
-	    (re-search-forward "[[:space:]\n]" end t)
+	    (re-search-forward "[[:space:]\n]+" end t)
 	    (recenter 0)
 	    (if (> (point) end)
 	      (setq flag nil)
 	    );if
 	    (if ignlist
 	      ;;in this case, we can move even further
-	      (if (is-point-in-ignore-list (point) ignlist)
-	        (progn
-		  (setq ignlist (remove-if (lambda (x) (< (second x) (point))) ignlist))
-	          (goto-char (second (is-point-in-ignore-list (point) ignlist)))
+	      (while (is-point-in-ignore-list (point) ignlist)
+	        ;(progn
+	    	  ;(setq ignlist (remove-if (lambda (x) (< (second x) (point))) ignlist))
+	          (goto-char (+ 1 (second (is-point-in-ignore-list (point) ignlist))))
 	          (recenter 0)
 	          (if (> (point) end)
 	            (setq flag nil)
 	          );if
-	        );progn
-	      );if
+	        ;);progn
+	      );while
 	    );if
 	  );if
 	);if
