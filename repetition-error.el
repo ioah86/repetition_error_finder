@@ -183,6 +183,20 @@
 ;;     revisit that topic later.
 ;;   - Made an efficiency improve in other areas. Still very slow on
 ;;     some latex-files.
+;;- Di 27. Okt 22:26:41 EDT 2015:
+;;   - Altered the function get-next-n-words-with-ignore-list to be
+;;     more "fuel-efficient".
+;;   - Fixed a potential bug in find-repetition-error that may would
+;;     cause problems if some of the entries in ignore-list would go
+;;     overboard (i.e. beyond the end of the buffer).
+;;- Fr 13. Nov 21:38:33 EST 2015:
+;;   - Introduced the variable temp-word-block
+;;   - applied the temp-word-block thing to
+;;     get-next-n-words-from-point and tested it
+;;   - applied the temp-word-block thing to
+;;     get-next-n-words-with-ignore-list, but not yet tested
+
+
 
 
 
@@ -208,6 +222,17 @@ The initial value is 2.
 "
 );repetition-error-min-occurrence
 
+
+(defvar rep-temp-word-block nil
+"
+If not nil, this is a three touple (s i j) consisting of a string s,
+two non-negative integers i and j with i<j, which represent
+the starting position of s in the buffer and the ending position
+(remark: j is not necessarily i+length(s), because we might have
+an ignore list going around)
+"
+)
+
 (defun transform-complete-ci-string (s)
 "string->string
 This function consumes a string s, and replaces any letter in this
@@ -220,6 +245,8 @@ well as the lower-case of that same letter. For example, the string
 	 s
 	 t)
 );transform-complete-ci-string
+
+(byte-compile 'transform-complete-ci-string)
 
 (ert-deftest transform-complete-ci-string-test ()
 "This function tests the fuction transform-complete-ci-string.
@@ -266,6 +293,7 @@ SIDE-EFFECT:
   (interactive)
   (find-repetition-error (point-min) (point-max) repetition-error-word-block-size repetition-error-min-occurrence)
 );find-repetition-error-whole-buffer
+
 
 (defun find-repetition-error-latex-whole-buffer ()
 "None->None
@@ -375,12 +403,18 @@ ASSUMPTIONS:
 	 (tempExc nil)
 	 (tempKnownsList nil)
 	 (usrcmd nil)
+	 (temp-touple nil)
 	);let definitions
       (while flag
 	(if (not ignlist)
 	    (setq curWordBlock (get-next-n-words-from-point nWords (point)))
 	    ;else
 	  ;(setq ignlist (remove-if (lambda (x) (< (second x) (point))) ignlist))
+	  (while (and
+		  (not (equal ignlist nil))
+		  (< (second (first ignlist)) (point)))
+	    (setq ignlist (rest ignlist))
+	  );while
 	  (setq curWordBlock (get-next-n-words-with-ignore-list nWords (point) ignlist))
 	);if
 	(if
@@ -409,13 +443,23 @@ ASSUMPTIONS:
 		);if
 		(if ignlist
 		  ;;in this case, we can move even further
-		  (while (is-point-in-ignore-list (point) ignlist)
+		  (setq temp-touple (is-point-in-ignore-list (point) ignlist))
+		  (while (and
+			  (not (equal temp-touple nil))
+			  (<= (second temp-touple) end))
 		    ;(progn
+		      
 		      ;(setq ignlist (remove-if (lambda (x) (< (second x) (point))) ignlist))
 		      (goto-char (+ 1 (second (is-point-in-ignore-list
 					  (point) ignlist))))
 		      (recenter 0)
-		      (if (> (point) end)
+		      (setq temp-touple (is-point-in-ignore-list
+					 (point) ignlist))
+		      (if (or
+			   (> (point) end)
+			   (and
+			    (not (equal temp-touple nil))
+			    (>= (second temp-touple) end)))
 		        (setq flag nil)
 		      );if
 		    ;);progn
@@ -445,14 +489,23 @@ ASSUMPTIONS:
 	    );if
 	    (if ignlist
 	      ;;in this case, we can move even further
-	      (while (is-point-in-ignore-list (point) ignlist)
+	      (setq temp-touple (is-point-in-ignore-list (point) ignlist))
+	      (while (and
+			  (not (equal temp-touple nil))
+			  (<= (second temp-touple) end))
 	        ;(progn
 	    	  ;(setq ignlist (remove-if (lambda (x) (< (second x) (point))) ignlist))
 	          (goto-char (+ 1 (second (is-point-in-ignore-list (point) ignlist))))
 	          (recenter 0)
-	          (if (> (point) end)
-	            (setq flag nil)
-	          );if
+		  (setq temp-touple (is-point-in-ignore-list
+				     (point) ignlist))
+		  (if (or
+		       (> (point) end)
+		       (and
+			(not (equal temp-touple nil))
+			(>= (second temp-touple) end)))
+		      (setq flag nil)
+		    );if
 	        ;);progn
 	      );while
 	    );if
@@ -464,6 +517,8 @@ ASSUMPTIONS:
   (message "Finished finding repetition errors")
   ;);save-excursion
 );find-repetition-error
+
+(byte-compile 'find-repetition-error)
 
 (defun update-knowns-list (knownList newExceeders leftBound
 				     rightBound)
@@ -490,6 +545,8 @@ ASSUMPTIONS:
     (reverse result)
   );let
 );update-knowns-list
+
+(byte-compile 'update-knowns-list)
 
 ;; Tests
 (ert-deftest test-update-knowns-list ()
@@ -590,6 +647,7 @@ them as intervals."
   );labels
 );filter-known-words
 
+;(byte-compile 'filter-known-words)
 ;; Tests
 
 (ert-deftest test-filter-known-words ()
@@ -639,37 +697,64 @@ extract. This function returns a three tuple, containing:
 - the position when this string ends in the buffer
 ASSUMPTIONS:
  - The point p is at the beginning of a word
+ - if the variable rep-temp-word-block is set,
+   p will be ignored and we assume that p is
+   (second rep-temp-word-block)
 SIDE EFFECTS:
  - The cursor will in the end actually be moved to position p
  - Accesses cursor positions
 "
   (goto-char p)
-  (let
-    (;let definitions
-     (flag t)
-     (i n)
-     (curpos (point))
-    );let definitions
-    (while (and (> i 0) flag)
-      (setq curpos (point))
+  (if (not rep-temp-word-block)
+      (let
+	  (;let definitions
+	   (flag t)
+	   (i n)
+	   (curpos (point))
+	   );let definitions
+	(while (and (> i 0) flag)
+	  (setq curpos (point))
+	  (re-search-forward "[[:space:]\n]+" (point-max) t)
+	  (if (equal curpos (point))
+	      (setq flag nil)
+	    );if
+	  (setq i (- i 1))
+	  );while
+	(setq curpos (point))
+	(goto-char p)
+	(setq rep-temp-word-block 
+					;(if flag
+	      (list (buffer-substring-no-properties p curpos) p curpos))
+					;(list "" p curpos)
+					;);if
+	rep-temp-word-block
+	);let
+    ;else
+    (goto-char (second rep-temp-word-block))
+    (let
+	(;let definitions
+	 (curWordBlock (first rep-temp-word-block))
+	 (begin-pos (second rep-temp-word-block))
+	 (end-pos (third rep-temp-word-block))
+	);let definitions
       (re-search-forward "[[:space:]\n]+" (point-max) t)
-      (if (equal curpos (point))
-	  (setq flag nil)
-      );if
-      (setq i (- i 1))
-    );while
-    (setq curpos (point))
-    (goto-char p)
-    ;(if flag
-    (list (buffer-substring-no-properties p curpos) p curpos)
-    ;(list "" p curpos)
-    ;);if
-  );let
+      (setq begin-pos (point))
+      (goto-char end-pos)
+      (re-search-forward "[[:space:]\n]+" (point-max) t)
+      (setq end-pos (point))
+      (setq rep-temp-word-block
+	    (list (buffer-substring-no-properties begin-pos end-pos)
+		  begin-pos end-pos))
+    );let
+  );if
 );;get-next-n-words-from-point
+
+(byte-compile 'get-next-n-words-from-point)
 
 (ert-deftest get-next-n-words-from-point-test ()
 "Here, we test the function get-next-n-words-from-point.
 Our test suite contains the following test-cases:
+NO set rep-temp-word-block
 1. An empty buffer
 2. Boundary case for number of words with boundary that has the exact
    number of words available
@@ -679,22 +764,29 @@ Our test suite contains the following test-cases:
 5. Large text, boundary case with more words asked for than available.
 6. Large text, non-boundary case with way more words asked for than available.
 7. Large text, non-boundary case producing text.
+SET rep-temp-word-block
+8. Boundary case: moving one word forward in a block where there is
+                  only one more word.
 "
   ;1.
+  (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/empty_test_buffer.txt"))
   (should (equal (get-next-n-words-from-point 100 1) (list "" 1 1)))
   (kill-buffer "empty_test_buffer.txt")
   ;2.
+  (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
   (should (equal (get-next-n-words-from-point 3 1) (list "Lorem ipsum \
 dolor.\n" 1 20)))
   (kill-buffer "test_buffer_3_words.txt")
   ;3.
+  (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
   (should (equal (get-next-n-words-from-point 4 1) (list "Lorem ipsum \
 dolor.\n" 1 20)))
   (kill-buffer "test_buffer_3_words.txt")
   ;4.
+  (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
   (should (equal (get-next-n-words-from-point 50 1) (list "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam
 nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat,
@@ -704,6 +796,7 @@ ipsum dolor sit amet.
 " 1 297)))
   (kill-buffer "test_buffer_50_words.txt")
   ;5.
+  (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
   (should (equal (get-next-n-words-from-point 51 1) (list "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam
 nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat,
@@ -713,6 +806,7 @@ ipsum dolor sit amet.
 " 1 297)))
   (kill-buffer "test_buffer_50_words.txt")
   ;6.
+  (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
   (should (equal (get-next-n-words-from-point 100 1) (list "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam
 nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat,
@@ -722,10 +816,17 @@ ipsum dolor sit amet.
 " 1 297)))
   (kill-buffer "test_buffer_50_words.txt")
   ;7.
+  (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
   (should (equal (get-next-n-words-from-point 3 1) (list "Lorem ipsum \
 dolor " 1 19)))
   (kill-buffer "test_buffer_50_words.txt")
+  ;8
+  (setq rep-temp-word-block (list "Lorem ipsum " 1 13))
+  (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
+  (should (equal (get-next-n-words-from-point 2 1) (list "ipsum \
+dolor.\n" 7 20)))
+  (kill-buffer "test_buffer_3_words.txt")
 );get-next-n-words-from-point-test
 
 (defun create-ignore-list-by-regexp (inpRE)
@@ -760,6 +861,8 @@ all these tuples is returned in the end.
     );let
   );save-excursion
 );create-ignore-list-by-regexp
+
+(byte-compile 'create-ignore-list-by-regexp)
 
 ;; Tests
 (ert-deftest create-ignore-list-by-regexp-test ()
@@ -909,6 +1012,8 @@ GENERAL ASSUMPTIONS:
   );let
 );create-ignore-list-for-latex-buffer ()
 
+(byte-compile 'create-ignore-list-for-latex-buffer)
+
 ;; Tests
 (ert-deftest create-ignore-list-for-latex-buffer-test ()
 "Here, we test the function create-ignore-list-for-latex-buffer.
@@ -956,6 +1061,8 @@ the first interval in ign with p in it, and nil otherwise.
   );let
 );is-point-in-ignore-list
 
+(byte-compile 'is-point-in-ignore-list)
+
 ;; Tests:
 (ert-deftest is-point-in-ignore-list-test ()
 "This function tests the helper function is-point-in-ignore-list.
@@ -1002,45 +1109,106 @@ SIDE EFFECTS:
  - Accesses cursor positions
 "
   (goto-char p)
-  (let
-    (;let definitions
-     (flag t)
-     (i n)
-     (curpos (point))
-     (temp-touple ())
-     (result "")
-     (temp-word "")
-    );let definitions
-    (while (and (> i 0) flag)
-      (setq curpos (point))
-      (re-search-forward "[[:space:]\n]+" (point-max) t)
-      (if (equal curpos (point))
-	  (setq flag nil)
-      );if
-      (setq temp-word "")
-      (while (< curpos (point))
-	(if (not (is-point-in-ignore-list curpos ign))
+  (if (not rep-temp-word-block)
+      (let
+	  (;let definitions
+	   (flag t)
+	   (i n)
+	   (curpos (point))
+	   (temp-touple ())
+	   (result "")
+	   (temp-word "")
+	   );let definitions
+	(while (and (> i 0) flag)
+	  (setq temp-touple (is-point-in-ignore-list (point) ign))
+	  (while (and
+		  (not (equal temp-touple ()))
+		  (<= (second temp-touple) (point-max))
+		  )
+	    (goto-char (+ 1 (second temp-touple)))
+	    (setq temp-touple (is-point-in-ignore-list (point) ign))
+	    );while
+	  (setq curpos (point))
+	  (re-search-forward "[[:space:]\n]+" (point-max) t)
+	  (if (>= curpos (point))
+	      (setq flag nil)
+	    );if
+	  (setq temp-word "")
+	  (while (and 
+		  (< curpos (point))
+		  (not (is-point-in-ignore-list curpos ign)))
 	    (setq temp-word (concat temp-word
 				    (buffer-substring-no-properties
 				     curpos (+ 1 curpos))))
+	    (setq curpos (+ 1 curpos))
+	    );while
+	  (if (string-match "[[:alpha:]]" temp-word)
+	      (progn
+		(setq result (concat result temp-word))
+		(setq i (- i 1))
+		);progn
+	    );if
+	  );while
+	(setq curpos (point))
+	(goto-char p)
+	(setq rep-temp-word-block (list result p curpos))
+					;(if flag
+    	rep-temp-word-block
+					;    (list "" p curpos)
+					;);if
+	);let
+    ;else
+    (goto-char (second rep-temp-word-block))
+    (let
+	(;let definitions
+	 (curWordBlock (first rep-temp-word-block))
+	 (begin-pos (second rep-temp-word-block))
+	 (end-pos (third rep-temp-word-block))
+	 (temp-word "")
+	 (temp-touple nil)
+	 (flag nil)
+	);let definitions
+      (re-search-forward "[[:space:]\n]+" (point-max) t)
+      (setq curWordBlock (substring curWordBlock (- (point) begin-pos)))
+      (setq begin-pos (point))
+      (goto-char end-pos)
+      (temp-touple (is-point-in-ignore-list (point) ign))
+      (while (not string-match "[[:alpha:]]" temp-word)
+	(setq temp-touple (is-point-in-ignore-list (point) ign))
+	(if temp-touple
+	    (goto-char (+ 1 (second temp-touple)))
+	  ;else
+	  (if (not (string-match "[[:alpha:]]" 
+			    (buffer-substring-no-properties (point)
+							    (+ 1
+							       (point)))))
+	      (goto-char (+ 1 (point)))
+	    ;else
+	    (while (not 
+		    (string-match "[[:space:]\n]"
+				  (buffer-substring-no-properties (point)
+								  (+ 1
+								     (point)))))
+	      (setq temp-word (concat temp-word
+				    (buffer-substring-no-properties
+				     (point) (+ 1 (point)))))
+	      (goto-char (+ 1 (point)))
+	    );while
+	  );if
 	);if
-	(setq curpos (+ 1 curpos))
       );while
-      (if (string-match "[[:alpha:]]" temp-word)
-	  (progn
-	    (setq result (concat result temp-word))
-	    (setq i (- i 1))
-	  );progn
-      );if
-    );while
-    (setq curpos (point))
-    (goto-char p)
-    ;(if flag
-    	(list result p curpos)
-    ;    (list "" p curpos)
-    ;);if
-  );let
+      (setq temp-word (concat temp-word (buffer-substring-no-properties
+				     (point) (+ 1 (point)))))
+      (goto-char (+ 1 (point)))
+      (setq curWordBlock (concat curWordBlock temp-word))
+      (setq end-pos (point))
+      (setq rep-temp-word-block (list curWordBlock begin-pos end-pos))
+      rep-temp-word-block
+    );let
+  );if
 );;get-next-n-words-with-ignore-list
+
+(byte-compile 'get-next-n-words-with-ignore-list)
 
 ;; Tests:
 (ert-deftest get-next-n-words-with-ignore-list-test ()
@@ -1059,32 +1227,38 @@ covered test cases are:
    more words than available.
 8. Whole buffer is ignored."
   ;1.
+  (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/empty_test_buffer.txt"))
   (should (equal (get-next-n-words-with-ignore-list 50 1 nil) (list ""
 								    1 1)))
   (kill-buffer "empty_test_buffer.txt")
   ;2.
+  (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/empty_test_buffer.txt"))
   (should (equal (get-next-n-words-with-ignore-list 50 1 '((0 50) (70
 								   100)))
 		 (list "" 1 1)))
   (kill-buffer "empty_test_buffer.txt")
   ;3.
+  (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
   (should (equal (get-next-n-words-with-ignore-list 50 1 nil)
 		 (list "Lorem ipsum dolor.\n" 1 20)))
   (kill-buffer "test_buffer_3_words.txt")
   ;4.
+  (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
   (should (equal (get-next-n-words-with-ignore-list 2 1 '((1 6)))
 		 (list "ipsum dolor.\n" 1 20)))
   (kill-buffer "test_buffer_3_words.txt")
   ;5.
+  (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
   (should (equal (get-next-n-words-with-ignore-list 3 1 '((13 18)))
 		 (list "Lorem ipsum " 1 20)))
   (kill-buffer "test_buffer_3_words.txt")
   ;6.
+  (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
   (should (equal (get-next-n-words-with-ignore-list 10 1 
 						    '((1 6) (13 18)
@@ -1093,6 +1267,7 @@ covered test cases are:
 nonumy eirmod " 1 81)))
   (kill-buffer "test_buffer_50_words.txt")
   ;7.
+  (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
   (should (equal (get-next-n-words-with-ignore-list 50 1 
 						    '((1 6) (13 18)
@@ -1101,6 +1276,7 @@ nonumy eirmod " 1 81)))
 nonumy eirmod tempor invidunt ut labore et dolore sed diam voluptua. At vero eos et accusam et justo duo dolores et ea\nrebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem\nipsum dolor sit amet.\n" 1 297)))
   (kill-buffer "test_buffer_50_words.txt")
   ;8.
+  (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
   (should (equal (get-next-n-words-with-ignore-list 20 1 
 						    '((1 296)))
@@ -1152,6 +1328,7 @@ letters in a are lowercase.
   );;labels
 );exceeders
 
+;(byte-compile 'exceeders)
 ;; Tests
 
 (ert-deftest exceeders-test ()
