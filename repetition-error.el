@@ -201,6 +201,12 @@
 ;;   - tested get-next-n-words-with-ignore-list with the new
 ;;     extension with rep-temp-word-block
 ;;   - incorporated all into find-repetition-error function
+;;- So 15. Nov 14:48:30 EST 2015:
+;;   - Altered get-next-n-words with ignore list to begin the
+;;     pointer with the first word that has not been in the
+;;     ignore list.
+;;   - Added the property to find-repetition-error, that the
+;;     found word is always visible.
 
 
 ;;; CODE:
@@ -407,6 +413,7 @@ ASSUMPTIONS:
 	 (tempKnownsList nil)
 	 (usrcmd nil)
 	 (temp-touple nil)
+	 (temp-pos 0)
 	);let definitions
       (while flag
 	(if (not ignlist)
@@ -472,11 +479,18 @@ ASSUMPTIONS:
 		;else
 	    (setq tempExc exc)
 	    (while (not (equal tempExc ()))
+	      (setq temp-pos (point))
+	      (re-search-forward (transform-complete-ci-string (car
+		      (car tempExc))) end t)
+	      (recenter 0)
 	      (highlight-regexp (transform-complete-ci-string (car (car tempExc))))
 	      (setq usrcmd 
 		    (read-char (format "Repeated word: \"%s\". (c) Continue search for repetition errors or (any key) quit?" (car (car tempExc))))
 	      );setq
-	      (unhighlight-regexp (transform-complete-ci-string (car (car tempExc))))
+	      (unhighlight-regexp (transform-complete-ci-string (car
+		      (car tempExc))))
+	      (goto-char temp-pos)
+	      (recenter 0)
 	      (setq tempExc (cdr tempExc))
 	      (if (not (equal usrcmd 99));;99 is ASCII for 'c'
                 (progn
@@ -1123,6 +1137,7 @@ SIDE EFFECTS:
 	   (temp-touple ())
 	   (result "")
 	   (temp-word "")
+	   (temp-begin 0)
 	   );let definitions
 	(while (and (> i 0) flag)
 	  (setq temp-touple (is-point-in-ignore-list (point) ign))
@@ -1156,7 +1171,14 @@ SIDE EFFECTS:
 	  );while
 	(setq curpos (point))
 	(goto-char p)
-	(setq rep-temp-word-block (list result p curpos))
+	(setq temp-begin (point))
+	(setq temp-touple (is-point-in-ignore-list temp-begin ign))
+	(while (and temp-touple
+		    (< temp-begin (point-max)))
+	  (setq temp-begin (+ 1 (second temp-touple)))
+	  (setq temp-touple (is-point-in-ignore-list temp-begin ign))
+	);while
+	(setq rep-temp-word-block (list result temp-begin curpos))
 					;(if flag
     	rep-temp-word-block
 					;    (list "" p curpos)
@@ -1272,7 +1294,7 @@ TESTS WITH rep-temp-word-block
   (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
   (should (equal (get-next-n-words-with-ignore-list 2 1 '((1 6)))
-		 (list "ipsum dolor.\n" 1 20)))
+		 (list "ipsum dolor.\n" 7 20)))
   (kill-buffer "test_buffer_3_words.txt")
   ;5.
   (setq rep-temp-word-block nil)
@@ -1287,7 +1309,7 @@ TESTS WITH rep-temp-word-block
 						    '((1 6) (13 18)
 						      (117 136)))
 		 (list "ipsum sit amet, consetetur sadipscing elitr, sed diam
-nonumy eirmod " 1 81)))
+nonumy eirmod " 7 81)))
   (kill-buffer "test_buffer_50_words.txt")
   ;7.
   (setq rep-temp-word-block nil)
@@ -1296,14 +1318,14 @@ nonumy eirmod " 1 81)))
 						    '((1 6) (13 18)
 						      (117 136)))
 		 (list "ipsum sit amet, consetetur sadipscing elitr, sed diam
-nonumy eirmod tempor invidunt ut labore et dolore sed diam voluptua. At vero eos et accusam et justo duo dolores et ea\nrebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem\nipsum dolor sit amet.\n" 1 297)))
+nonumy eirmod tempor invidunt ut labore et dolore sed diam voluptua. At vero eos et accusam et justo duo dolores et ea\nrebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem\nipsum dolor sit amet.\n" 7 297)))
   (kill-buffer "test_buffer_50_words.txt")
   ;8.
   (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
   (should (equal (get-next-n-words-with-ignore-list 20 1 
 						    '((1 296)))
-		 (list "" 1 297)))
+		 (list "" 297 297)))
   (kill-buffer "test_buffer_50_words.txt")
   ;9.
   (setq rep-temp-word-block (list "ipsum " 7 13))
