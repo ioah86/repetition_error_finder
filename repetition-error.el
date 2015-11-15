@@ -191,14 +191,16 @@
 ;;     overboard (i.e. beyond the end of the buffer).
 ;;- Fr 13. Nov 21:38:33 EST 2015:
 ;;   - Introduced the variable temp-word-block
-;;   - applied the temp-word-block thing to
+;;   - applied the rep-temp-word-block thing to
 ;;     get-next-n-words-from-point and tested it
-;;   - applied the temp-word-block thing to
+;;   - applied the rep-temp-word-block thing to
 ;;     get-next-n-words-with-ignore-list, but not yet tested
-
-
-
-
+;;- Sa 14. Nov 23:18:30 EST 2015:
+;;   - made get-next-n-words-with-ignore-list
+;;     more clear.
+;;   - tested get-next-n-words-with-ignore-list with the new
+;;     extension with rep-temp-word-block
+;;   - incorporated all into find-repetition-error function
 
 
 ;;; CODE:
@@ -394,6 +396,7 @@ ASSUMPTIONS:
   (if (<= end begin)
       "Invalid bounds"
     (goto-char begin)
+    (setq rep-temp-word-block nil)
     (recenter 0)
     (let 
 	(;let definitions
@@ -745,6 +748,8 @@ SIDE EFFECTS:
       (setq rep-temp-word-block
 	    (list (buffer-substring-no-properties begin-pos end-pos)
 		  begin-pos end-pos))
+      (goto-char begin-pos)
+      rep-temp-word-block
     );let
   );if
 );;get-next-n-words-from-point
@@ -1161,49 +1166,62 @@ SIDE EFFECTS:
     (goto-char (second rep-temp-word-block))
     (let
 	(;let definitions
-	 (curWordBlock (first rep-temp-word-block))
 	 (begin-pos (second rep-temp-word-block))
 	 (end-pos (third rep-temp-word-block))
-	 (temp-word "")
+	 (curWordBlock (first rep-temp-word-block))
 	 (temp-touple nil)
-	 (flag nil)
+	 (temp-pos 0)
+	 (flag t)
+	 (temp-word "")
 	);let definitions
-      (re-search-forward "[[:space:]\n]+" (point-max) t)
-      (setq curWordBlock (substring curWordBlock (- (point) begin-pos)))
-      (setq begin-pos (point))
-      (goto-char end-pos)
-      (temp-touple (is-point-in-ignore-list (point) ign))
-      (while (not string-match "[[:alpha:]]" temp-word)
-	(setq temp-touple (is-point-in-ignore-list (point) ign))
-	(if temp-touple
+        ;; We begin by deleting the first word in curWordBlock
+        (goto-char begin-pos)
+	(re-search-forward "[[:space:]\n]+" (point-max) t)
+	(setq curWordBlock (substring curWordBlock (- (point)
+						      begin-pos)))
+	(setq begin-pos (point))
+	(setq temp-touple (is-point-in-ignore-list begin-pos ign))
+	(while temp-touple
+	  (setq begin-pos (+ 1 (second temp-touple)))
+	  (setq temp-touple (is-point-in-ignore-list begin-pos ign))
+	);while
+	;; now we find the next word at the end.
+	(goto-char end-pos)
+	(while flag
+	  (setq temp-touple (is-point-in-ignore-list (point) ign))
+	  (while (and
+		  (not (equal temp-touple ()))
+		  (<= (second temp-touple) (point-max))
+		  )
 	    (goto-char (+ 1 (second temp-touple)))
-	  ;else
-	  (if (not (string-match "[[:alpha:]]" 
-			    (buffer-substring-no-properties (point)
-							    (+ 1
-							       (point)))))
-	      (goto-char (+ 1 (point)))
-	    ;else
-	    (while (not 
-		    (string-match "[[:space:]\n]"
-				  (buffer-substring-no-properties (point)
-								  (+ 1
-								     (point)))))
-	      (setq temp-word (concat temp-word
+	    (setq temp-touple (is-point-in-ignore-list (point) ign))
+	  );while
+	  (setq temp-pos (point))
+	  (re-search-forward "[[:space:]\n]+" (point-max) t)
+	  (if (>= temp-pos (point))
+	      (setq flag nil)
+	    );if
+	  (setq temp-word "")
+	  (while (and 
+		  (< temp-pos (point))
+		  (not (is-point-in-ignore-list temp-pos ign)))
+	    (setq temp-word (concat temp-word
 				    (buffer-substring-no-properties
-				     (point) (+ 1 (point)))))
-	      (goto-char (+ 1 (point)))
+				     temp-pos (+ 1 temp-pos))))
+	    (setq temp-pos (+ 1 temp-pos))
 	    );while
-	  );if
-	);if
-      );while
-      (setq temp-word (concat temp-word (buffer-substring-no-properties
-				     (point) (+ 1 (point)))))
-      (goto-char (+ 1 (point)))
-      (setq curWordBlock (concat curWordBlock temp-word))
-      (setq end-pos (point))
-      (setq rep-temp-word-block (list curWordBlock begin-pos end-pos))
-      rep-temp-word-block
+	    (if (string-match "[[:alpha:]]" temp-word)
+	      (progn
+		(setq curWordBlock (concat curWordBlock temp-word))
+		(setq flag nil)
+	      );progn
+	    );if
+	);while
+	(setq end-pos (point))
+	(setq rep-temp-word-block (list curWordBlock begin-pos
+					end-pos))
+	(goto-char begin-pos)
+	rep-temp-word-block
     );let
   );if
 );;get-next-n-words-with-ignore-list
@@ -1214,6 +1232,7 @@ SIDE EFFECTS:
 (ert-deftest get-next-n-words-with-ignore-list-test ()
 "Here, we test the function get-next-n-words with-ignore-list. The
 covered test cases are:
+TESTS WITHOUT rep-temp-word-block
 1. empty file, empty ignore list.
 2. empty file, non-empty ignore list.
 3. non-empty file, empty ignore list.
@@ -1225,7 +1244,11 @@ covered test cases are:
    words available than asked for.
 7. non-empty file, non-empty ignore-list non-border case asking for
    more words than available.
-8. Whole buffer is ignored."
+8. Whole buffer is ignored.
+TESTS WITH rep-temp-word-block
+9. Non-empty ignore list, non-empty-text, next word.
+10. Non-base-example, similar to 6
+"
   ;1.
   (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/empty_test_buffer.txt"))
@@ -1281,6 +1304,22 @@ nonumy eirmod tempor invidunt ut labore et dolore sed diam voluptua. At vero eos
   (should (equal (get-next-n-words-with-ignore-list 20 1 
 						    '((1 296)))
 		 (list "" 1 297)))
+  (kill-buffer "test_buffer_50_words.txt")
+  ;9.
+  (setq rep-temp-word-block (list "ipsum " 7 13))
+  (set-buffer (find-file "./test_files/test_buffer_3_words.txt"))
+  (should (equal (get-next-n-words-with-ignore-list 1 1 '((1 6)))
+		 (list "dolor.\n" 13 20)))
+  (kill-buffer "test_buffer_3_words.txt")
+  ;10
+  (setq rep-temp-word-block (list "ipsum sit amet, consetetur sadipscing elitr, sed diam
+nonumy " 1 74))
+  (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
+  (should (equal (get-next-n-words-with-ignore-list 9 1 
+						    '((1 6) (13 18)
+						      (117 136)))
+		 (list "sit amet, consetetur sadipscing elitr, sed diam
+nonumy eirmod " 7 81)))
   (kill-buffer "test_buffer_50_words.txt")
 );get-next-n-words-with-ignore-list-test
 
