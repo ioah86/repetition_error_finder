@@ -1,5 +1,5 @@
-Repetition Error finding in Emacs
-=================================
+Repetition Error finding in Emacs (BETA)
+========================================
 
 This Emacs package helps people who write longer texts to check
 whether or not they have some repetition errors in there. With
