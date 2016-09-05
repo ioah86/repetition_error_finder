@@ -24,7 +24,7 @@
 ;; General Description                          ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-;; The main function in this package is "find-repetition-error". It
+;; The main function in this package is "find-reperr". It
 ;; takes a starting point and an end point, and if the section is long
 ;; enough (i.e. enough words given), it will highlight repetitions,
 ;; and ask the user either to continue and ignore that repetition, or
@@ -33,10 +33,10 @@
 ;; wants.
 ;; There are the following functions that can be interactively
 ;; called.
-;; find-repetition-error-whole-buffer:
-;;   Runs the function "find-repetition-error" from the beginning
+;; find-reperr-whole-buffer:
+;;   Runs the function "find-reperr" from the beginning
 ;;   until the end of the whole buffer
-;; find-repetition-error-from-point:
+;; find-reperr-from-point:
 ;;   Runs the function "find-repetition error" from the current cursor
 ;;   position until the end of the document. This can be also used as
 ;;   a way to resume a previously stopped repetition error search
@@ -68,145 +68,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; TODOs:                                       ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;   - LaTeX support (i.e. ignore LaTeX keywords)
 ;;   - Experiment with different block sizes and repetition
 ;;     occurrences.
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CHANGELOG:                                   ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;- Mi 14. Jan 22:30:15 EST 2015:
-;;   Initial beta version done.
-;;- Mo 2. Feb 11:04:53 EST 2015:
-;;   - Added function to find repetition errors starting from current
-;;     current cursor position.
-;;   - removed save-recursion from find-repetition error function.
-;;- Fr 6. Feb 23:23:57 EST 2015:
-;;   - Altered the documentation a bit
-;;   - General description given of the main functionality.
-;;- Do 19. Feb 22:28:18 EST 2015:
-;;   - added function get-next-n-words-with-ignore-list
-;;   - added function is-point-in-ignore-list
-;;   - changed regular expression in
-;;     - get-next-n-words-with-ignore-list
-;;     - get-next-n-words-from-point
-;;- So 1. Mär 21:47:08 EST 2015:
-;;   - changed the function get-next-n-words-with-ignore-list to
-;;     actually not even put stuff from ignore-list into the resulting
-;;     string. 
-;;   - started to write the function
-;;     create-ignore-list-for-latex-buffer
-;;- So 12. Apr 01:27:47 EDT 2015:
-;;   - continued working on create-ignore-list-for-latex-buffer;
-;;     changes not tested yet though
-;;- Fr 12. Jun 22:36:01 EDT 2015:
-;;   - fixed an error in create-ignore-list-for-latex-buffer
-;;   - made first test on "real" LaTeX-buffer
-;;- Sa 13. Jun 21:06:57 EDT 2015:
-;;   - Now two papers can be processed error-less by
-;;     create-ignore-list-for-latex-buffer. Small bugfixes were
-;;     needed. 
-;;- Do 18. Jun 22:16:10 EDT 2015:
-;;   - Altered the function find-repetition-error to now also include
-;;     an optional parameter ignlist, the ignore-list for certain
-;;     types of documents (e.g. LaTeX, etc.)
-;;   - added (and rudimentary tested) the functions
-;;        find-repetition-error-latex-from-point
-;;        find-repetition-error-latex-whole-buffer
-;;- Sa 20. Jun 23:36:55 EDT 2015:
-;;   - Reduced the complexity of the function
-;;     find-repetition-error. If there is an ignore-list, we assume
-;;     that it is sorted by the value of the first entry of each
-;;     contained list; hence, we can ignore a whole bunch if our point
-;;     has exceeded the entry in the ignore-list 
-;;- Mi 1. Jul 00:37:29 EDT 2015:
-;;   - Created function create-ignore-list-by-regexp
-;;   - modified create-ignore-list-for-latex-buffer to also include
-;;     math modes given by \begin{eqnarray[*]}..\end{eqnarray[*]}
-;;     (resp. align[*])
-;;- So 12. Jul 21:11:25 EDT 2015:
-;;   - Changed the optimization in find-repetition-error with the
-;;     ignore list back again, as I have ambiguous output. Maybe I will
-;;     change that back later.
-;;   - Added Comment support for create-ignore-list-for-latex-buffer
-;;   - DEBUG for begin/end eqnarray.
-;;   - found out about new interesting function "match-beginning" and
-;;     replaced accordingly
-;;   - Put some non-greedy-search for the align and
-;;     eqnarray-Thing.
-;;- Do 3. Sep 22:36:50 EDT 2015:
-;;   - Edited the function create-ignore-list-for-latex-buffer, so
-;;     that it uses create-ignore-list-by-regexp to find
-;;     commented-out-areas.
-;;   - get-next-n-words-with-ignore-list debugged and optimized
-;;- Sa 10. Okt 14:55:38 EDT 2015:
-;;   - Added tests for update-knowns-list (finally figured out how to
-;;     test properly in emacs lisp)
-;;   - Added tests for filter-known-words.
-;;   - Added tests for is-point-in-ignore-list
-;;   - Added Tests for exceeders
-;;- So 11. Okt 22:07:23 EDT 2015:
-;;   - Added tests for transform-complete-ci-string
-;;   - Added test for get-next-n-words-from-point
-;;- Mo 12. Okt 12:27:40 EDT 2015:
-;;   - Moved the test-files into separate folder and altered the paths
-;;     in the tests
-;;   - Added tests for get-next-n-words-with-ignore-list
-;;   - rewrite of the function get-next-n-words-with-ignore-list to
-;;     catch some special cases
-;;- Mo 12. Okt 18:15:25 EDT 2015:
-;;   - Added tests for create-ignore-list-for-latex-buffer.
-;;   - Altered the function create-ignore-list-for-latex-buffer to not
-;;     return intervals that overlap.
-;;   - Altered the function create-ignore-list-for-latex-buffer to
-;;     use more regular expressions to get more short.
-;;- Fr 23. Okt 23:22:41 EDT 2015:
-;;   - Finished the tests for create-ignore-list-for-latex-buffer
-;;   - Altered the function to catch different cases of commands
-;;- Sa 24. Okt 15:48:41 EDT 2015:
-;;   - debunked create-ignore-list-for-latex-buffer
-;;   - Changed the use of get-next-n-words (with and without
-;;     repetition error. Not it returns a list containing the start
-;;     and the end point, besides the word-block.
-;;   - according to the above change, certain lines of
-;;     find-repetition-error had to be altered.
-;;- Sa 24. Okt 19:27:45 EDT 2015:
-;;   - Altered the function get-next-n-words to also return a string
-;;     in case not n words are available. It makes more sense in our
-;;     context.
-;;   - Made find-repetition-error more efficient by deleting from the
-;;     ignore list, if available, anything where the point cannot be in
-;;     any more.
-;;- So 25. Okt 19:57:26 EDT 2015:
-;;   - Removed the "efficiency" in find-repetition-error, as it was
-;;     not more efficient than before; however, we are going to
-;;     revisit that topic later.
-;;   - Made an efficiency improve in other areas. Still very slow on
-;;     some latex-files.
-;;- Di 27. Okt 22:26:41 EDT 2015:
-;;   - Altered the function get-next-n-words-with-ignore-list to be
-;;     more "fuel-efficient".
-;;   - Fixed a potential bug in find-repetition-error that may would
-;;     cause problems if some of the entries in ignore-list would go
-;;     overboard (i.e. beyond the end of the buffer).
-;;- Fr 13. Nov 21:38:33 EST 2015:
-;;   - Introduced the variable temp-word-block
-;;   - applied the rep-temp-word-block thing to
-;;     get-next-n-words-from-point and tested it
-;;   - applied the rep-temp-word-block thing to
-;;     get-next-n-words-with-ignore-list, but not yet tested
-;;- Sa 14. Nov 23:18:30 EST 2015:
-;;   - made get-next-n-words-with-ignore-list
-;;     more clear.
-;;   - tested get-next-n-words-with-ignore-list with the new
-;;     extension with rep-temp-word-block
-;;   - incorporated all into find-repetition-error function
-;;- So 15. Nov 14:48:30 EST 2015:
-;;   - Altered get-next-n-words with ignore list to begin the
-;;     pointer with the first word that has not been in the
-;;     ignore list.
-;;   - Added the property to find-repetition-error, that the
-;;     found word is always visible.
 
 
 ;;; CODE:
@@ -230,6 +94,15 @@ The initial value is 2.
 "
 );repetition-error-min-occurrence
 
+(defvar min-not-ignore-letters 4
+"
+  (Positive Integer)
+This variable stores the minimum word length, for which the word will
+not be ignored in the search for repetitions. Its standard value is
+4. This means, that words like and, it, ... will be ignored in the
+search for repetitions, but words like then, than, they will not.
+"
+);min-not-ignore-letters
 
 (defvar rep-temp-word-block nil
 "
@@ -284,7 +157,7 @@ The covered test cases are:
 );transform-complete-ci-string-test
 
 
-(defun find-repetition-error-whole-buffer ()
+(defun find-reperr-whole-buffer ()
 "None->None
 This function will scan the whole buffer for repetitions of certain
 words.  If the buffer does not have repetition-error-word-block-size
@@ -299,11 +172,11 @@ SIDE-EFFECT:
  - Highlights text
 "
   (interactive)
-  (find-repetition-error (point-min) (point-max) repetition-error-word-block-size repetition-error-min-occurrence)
-);find-repetition-error-whole-buffer
+  (find-reperr (point-min) (point-max) repetition-error-word-block-size repetition-error-min-occurrence)
+);find-reperr-whole-buffer
 
 
-(defun find-repetition-error-latex-whole-buffer ()
+(defun find-reperr-latex-whole-buffer ()
 "None->None
 This function will scan the whole buffer for repetitions of certain
 words, by ignoring LaTeX Commands.  If the buffer does not have repetition-error-word-block-size
@@ -318,14 +191,14 @@ SIDE-EFFECT:
  - Highlights text
 "
   (interactive)
-  (find-repetition-error (point-min)
+  (find-reperr (point-min)
 			 (point-max)
 			 repetition-error-word-block-size
 			 repetition-error-min-occurrence
 			 (create-ignore-list-for-latex-buffer))
-);find-repetition-error-latex-whole-buffer
+);find-reperr-latex-whole-buffer
 
-(defun find-repetition-error-from-point ()
+(defun find-reperr-from-point ()
 "None->None
 This function will scan the whole buffer, starting from the current
 cursor position, for repetitions of certain
@@ -341,10 +214,10 @@ SIDE-EFFECT:
  - Highlights text
 "
   (interactive)
-  (find-repetition-error (point) (point-max) repetition-error-word-block-size repetition-error-min-occurrence)
-);find-repetition-error-whole-buffer
+  (find-reperr (point) (point-max) repetition-error-word-block-size repetition-error-min-occurrence)
+);find-reperr-whole-buffer
 
-(defun find-repetition-error-latex-from-point ()
+(defun find-reperr-latex-from-point ()
 "None->None
 This function will scan the whole buffer, starting from the current
 cursor position, for repetitions of certain
@@ -360,14 +233,14 @@ SIDE-EFFECT:
  - Highlights text
 "
   (interactive)
-  (find-repetition-error (point)
+  (find-reperr (point)
 			 (point-max)
 			 repetition-error-word-block-size
 			 repetition-error-min-occurrence
 			 (create-ignore-list-for-latex-buffer))
-);find-repetition-error-latex-whole-buffer
+);find-reperr-latex-whole-buffer
 
-(defun find-repetition-error (begin end &optional nWords minRep ignlist)
+(defun find-reperr (begin end &optional nWords minRep ignlist)
 "integer->integer(->integer->integer->(listof (list integer integer)))->None
 This function will scan the buffer between the character at position
 begin and the character at position end for repetitions of certain
@@ -533,9 +406,9 @@ ASSUMPTIONS:
   );if
   (message "Finished finding repetition errors")
   ;);save-excursion
-);find-repetition-error
+);find-reperr
 
-(byte-compile 'find-repetition-error)
+(byte-compile 'find-reperr)
 
 (defun update-knowns-list (knownList newExceeders leftBound
 				     rightBound)
@@ -922,7 +795,7 @@ The covered test cases are:
 (defun create-ignore-list-for-latex-buffer ()
 "None->listof (Integer Integer)
 This function scans the buffer for substrings which can be ignored by
-our find-repetition-error routines, assuming that the current document
+our find-reperr routines, assuming that the current document
 is a LaTeX file. In particular, this function will detect matches to
 the following expressions and ignore them:
 - Math-modes (\[.*\], \(.*\), $.*$, $$.*$$)
@@ -1350,7 +1223,7 @@ nonumy eirmod " 7 81)))
 Given a string str, and a number 'number', this function returns a
 list of tuples (a, b), where a is a word in str, which appears b
 times in str, where b>=number. Furthermore, for a, we ignore it
-if its length is smaller than 4 letters, and we remove all space
+if its length is smaller than min-not-ignore-letters letters, and we remove all space
 characters, as well as digits and punctuation symbols, and all the
 letters in a are lowercase.
 "
@@ -1376,7 +1249,7 @@ letters in a are lowercase.
     (;labels body
      let
       (;let definitions
-       (filtered-inp (remove-if (lambda (m) (< (string-width m) 4))
+       (filtered-inp (remove-if (lambda (m) (< (string-width m) min-not-ignore-letters))
 				(split-string str
 					      "[[:punct:][:digit:][:space:]\n]"
 					      t)))
