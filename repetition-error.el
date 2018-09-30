@@ -277,7 +277,7 @@ ASSUMPTIONS:
     (goto-char begin)
     (setq rep-temp-word-block nil)
     (recenter 0)
-    (let 
+    (let
 	(;let definitions
 	 (flag t)
 	 (curWordBlock nil)
@@ -292,16 +292,16 @@ ASSUMPTIONS:
 	(if (not ignlist)
 	    (setq curWordBlock (get-next-n-words-from-point nWords (point)))
 	    ;else
-	  ;(setq ignlist (remove-if (lambda (x) (< (second x) (point))) ignlist))
+	  ;(setq ignlist (cl-remove-if (lambda (x) (< (nth 1 x) (point))) ignlist))
 	  (while (and
 		  (not (equal ignlist nil))
-		  (< (second (first ignlist)) (point)))
-	    (setq ignlist (rest ignlist))
+		  (< (nth 1 (nth 0 ignlist)) (point)))
+	    (setq ignlist (cdr ignlist))
 	  );while
 	  (setq curWordBlock (get-next-n-words-with-ignore-list nWords (point) ignlist))
 	);if
 	(if
-	  (>= (third curWordBlock) end)
+	  (>= (nth 2 curWordBlock) end)
 	  (progn
 	    (setq flag nil)
 	    "Reached the end of the buffer"
@@ -309,14 +309,14 @@ ASSUMPTIONS:
 		;else
 	  (setq exc (filter-known-words tempKnownsList
 					(exceeders
-					 (first curWordBlock)
+					 (nth 0 curWordBlock)
 					 minRep)
-					(second curWordBlock)
-					(third curWordBlock)))
+					(nth 1 curWordBlock)
+					(nth 2 curWordBlock)))
 	  (setq tempKnownsList
 		(update-knowns-list tempKnownsList exc
-				    (second curWordBlock)
-				    (third curWordBlock)))
+				    (nth 1 curWordBlock)
+				    (nth 2 curWordBlock)))
 	  (if (equal exc ())
 	      (progn
 		(re-search-forward "[[:space:]\n]+" end t)
@@ -329,11 +329,11 @@ ASSUMPTIONS:
 		  (setq temp-touple (is-point-in-ignore-list (point) ignlist))
 		  (while (and
 			  (not (equal temp-touple nil))
-			  (<= (second temp-touple) end))
+			  (<= (nth 1 temp-touple) end))
 		    ;(progn
-		      
-		      ;(setq ignlist (remove-if (lambda (x) (< (second x) (point))) ignlist))
-		      (goto-char (+ 1 (second (is-point-in-ignore-list
+
+		      ;(setq ignlist (cl-remove-if (lambda (x) (< (nth 1 x) (point))) ignlist))
+		      (goto-char (+ 1 (nth 1 (is-point-in-ignore-list
 					  (point) ignlist))))
 		      (recenter 0)
 		      (setq temp-touple (is-point-in-ignore-list
@@ -342,7 +342,7 @@ ASSUMPTIONS:
 			   (> (point) end)
 			   (and
 			    (not (equal temp-touple nil))
-			    (>= (second temp-touple) end)))
+			    (>= (nth 1 temp-touple) end)))
 		        (setq flag nil)
 		      );if
 		    ;);progn
@@ -357,7 +357,7 @@ ASSUMPTIONS:
 		      (car tempExc))) end t)
 	      (recenter 0)
 	      (highlight-regexp (transform-complete-ci-string (car (car tempExc))))
-	      (setq usrcmd 
+	      (setq usrcmd
 		    (read-char (format "Repeated word: \"%s\". (c) Continue search for repetition errors or (any key) quit?" (car (car tempExc))))
 	      );setq
 	      (unhighlight-regexp (transform-complete-ci-string (car
@@ -382,10 +382,10 @@ ASSUMPTIONS:
 	      (setq temp-touple (is-point-in-ignore-list (point) ignlist))
 	      (while (and
 			  (not (equal temp-touple nil))
-			  (<= (second temp-touple) end))
+			  (<= (nth 1 temp-touple) end))
 	        ;(progn
-	    	  ;(setq ignlist (remove-if (lambda (x) (< (second x) (point))) ignlist))
-	          (goto-char (+ 1 (second (is-point-in-ignore-list (point) ignlist))))
+	    	  ;(setq ignlist (cl-remove-if (lambda (x) (< (nth 1 x) (point))) ignlist))
+	          (goto-char (+ 1 (nth 1 (is-point-in-ignore-list (point) ignlist))))
 	          (recenter 0)
 		  (setq temp-touple (is-point-in-ignore-list
 				     (point) ignlist))
@@ -393,7 +393,7 @@ ASSUMPTIONS:
 		       (> (point) end)
 		       (and
 			(not (equal temp-touple nil))
-			(>= (second temp-touple) end)))
+			(>= (nth 1 temp-touple) end)))
 		      (setq flag nil)
 		    );if
 	        ;);progn
@@ -415,7 +415,7 @@ ASSUMPTIONS:
 "(listof (list string int int))->(listof (list string int))->int->int->(listof (list string int))
 This function consumes a list, knownlist, whose entries are tuples of a string and two integers,
 a list with tuples of string and int, newExceeders, and two integers, leftBound and rightBound.
-It first filters all the elements (s i j) in knownslist out, where j<leftbound. Then 
+It first filters all the elements (s i j) in knownslist out, where j<leftbound. Then
 it returns a concatenation of the filtered knownList and a list containing for every (s i) in newExceeders a tuple
  (s leftBound rightbound).
 ASSUMPTIONS:
@@ -424,13 +424,13 @@ ASSUMPTIONS:
   (let
       (;let definitions
        (tempNE newExceeders)
-       (result (reverse (remove-if (lambda (m) (if (< (third m) leftBound) t nil)) knownList)))
+       (result (reverse (cl-remove-if (lambda (m) (if (< (nth 2 m) leftBound) t nil)) knownList)))
       );let definitions
     (while (not (equal tempNE ()))
-      (setq result 
-	    (cons (cons (first (first tempNE)) (cons leftBound (cons rightBound())))
+      (setq result
+	    (cons (cons (nth 0 (nth 0 tempNE)) (cons leftBound (cons rightBound())))
 		  result))
-      (setq tempNE (rest tempNE))
+      (setq tempNE (cdr tempNE))
     );while
     (reverse result)
   );let
@@ -503,7 +503,7 @@ ASSUMPTIONS:
  - In every entry (s i j) of knownList, we always have i<j
  - leftBound < rightBound
 "
-  (labels
+  (cl-labels
       (;labels definitions
        (compareToKnownList (kl el)
 	  "This helper function consumes two lists, kl and el. kl
@@ -521,19 +521,19 @@ them as intervals."
 	    (while (and (not flag) (not (equal tempKL ())))
 	      (if
 	        (and
-		   (equal (first (first tempKL)) (first el))
-		   (< (second (first tempKL)) rightBound)
-		   (> (third (first tempKL)) leftBound)
+		   (equal (nth 0 (nth 0 tempKL)) (nth 0 el))
+		   (< (nth 1 (nth 0 tempKL)) rightBound)
+		   (> (nth 2 (nth 0 tempKL)) leftBound)
 	        );and
 		(setq flag t)
 	      );if
-	      (setq tempKL (rest tempKL))
+	      (setq tempKL (cdr tempKL))
 	    );while
 	    flag
 	  );let
        );compareToKnownList
       );labels definitions
-    (remove-if (lambda (el) (compareToKnownList knownList el)) newExceeders)
+    (cl-remove-if (lambda (el) (compareToKnownList knownList el)) newExceeders)
   );labels
 );filter-known-words
 
@@ -557,22 +557,22 @@ following:
   (should (equal (filter-known-words nil nil 0 100) nil))
   ;;2.
   (should (equal (filter-known-words nil '(("abc" 4) ("def" 2)) 19 30)
-		 (list (list "abc" 4) (list "def" 2))))
+        	 (list (list "abc" 4) (list "def" 2))))
   ;;3.
   (should (equal (filter-known-words '(("abc" 4 20) ("def" 2 35)) nil 19 30)
-		 nil))
+        	 nil))
   ;;4.
   (should (equal (filter-known-words '(("abc" 4 20) ("def" 2 35))
-				     '(("cde" 10) ("efg" 15)) 0 100)
-		 '(("cde" 10) ("efg" 15))))
+        			     '(("cde" 10) ("efg" 15)) 0 100)
+        	 '(("cde" 10) ("efg" 15))))
   ;;5.
   (should (equal (filter-known-words '(("abc" 1 18) ("cde" 5 25))
-				     '(("abc" 4) ("def" 2)) 19 30)
-		 '(("abc" 4) ("def" 2))))
+        			     '(("abc" 4) ("def" 2)) 19 30)
+        	 '(("abc" 4) ("def" 2))))
   ;;6.
   (should (equal (filter-known-words '(("abc" 1 20) ("cde" 5 25))
-				     '(("abc" 4) ("def" 2)) 19 30)
-		 '(("def" 2))))
+        			     '(("abc" 4) ("def" 2)) 19 30)
+        	 '(("def" 2))))
 );test-filter-known-words
 
 (defun get-next-n-words-from-point (n p)
@@ -589,7 +589,7 @@ ASSUMPTIONS:
  - The point p is at the beginning of a word
  - if the variable rep-temp-word-block is set,
    p will be ignored and we assume that p is
-   (second rep-temp-word-block)
+   (nth 1 rep-temp-word-block)
 SIDE EFFECTS:
  - The cursor will in the end actually be moved to position p
  - Accesses cursor positions
@@ -612,7 +612,7 @@ SIDE EFFECTS:
 	  );while
 	(setq curpos (point))
 	(goto-char p)
-	(setq rep-temp-word-block 
+	(setq rep-temp-word-block
 					;(if flag
 	      (list (buffer-substring-no-properties p curpos) p curpos))
 					;(list "" p curpos)
@@ -620,12 +620,12 @@ SIDE EFFECTS:
 	rep-temp-word-block
 	);let
     ;else
-    (goto-char (second rep-temp-word-block))
+    (goto-char (nth 1 rep-temp-word-block))
     (let
 	(;let definitions
-	 (curWordBlock (first rep-temp-word-block))
-	 (begin-pos (second rep-temp-word-block))
-	 (end-pos (third rep-temp-word-block))
+	 (curWordBlock (nth 0 rep-temp-word-block))
+	 (begin-pos (nth 1 rep-temp-word-block))
+	 (end-pos (nth 2 rep-temp-word-block))
 	);let definitions
       (re-search-forward "[[:space:]\n]+" (point-max) t)
       (setq begin-pos (point))
@@ -799,7 +799,7 @@ our find-reperr routines, assuming that the current document
 is a LaTeX file. In particular, this function will detect matches to
 the following expressions and ignore them:
 - Math-modes (\[.*\], \(.*\), $.*$, $$.*$$)
-- \begin{.+} and \end{.+} 
+- \begin{.+} and \end{.+}
 - \[a-zA-Z0-9]+[{]? in general (commands)
 - math modes a la \begin{eqnarray[*]} .. \end{eqnarray[*]} or
   \begin{align*} .. \end{align{*}}
@@ -820,27 +820,27 @@ GENERAL ASSUMPTIONS:
     (setq result (append result (create-ignore-list-by-regexp
 				 "%.*?$")))
     ;;begin/end eqnarray
-    (setq result (append result (remove-if 
+    (setq result (append result (cl-remove-if
 				 (lambda (x)
 				   (is-point-in-ignore-list
-				    (first x) result)) 
+				    (nth 0 x) result))
 				 (create-ignore-list-by-regexp
 				  "[\\]begin{eqnarray[\*]?}\\(.\\|\n\\)+?[\\]end{eqnarray[\*]?}"))))
     ;;begin/end align
-    (setq result (append result (remove-if 
+    (setq result (append result (cl-remove-if
 				 (lambda (x)
 				   (is-point-in-ignore-list
-				    (first x) result))
+				    (nth 0 x) result))
 				 (create-ignore-list-by-regexp
 				  "[\\]begin{align[\*]?}\\(.\\|\n\\)+?[\\]end{align[\*]?}"))))
     ;;math notations a la \( ... \)
     (setq result (append result (create-ignore-list-by-regexp
 				 "[\\][(]\\(.\\|\n\\)+?[\\][)]")))
     ;;math notations a la \[ ... \]
-    (setq result (append result 
+    (setq result (append result
 			 (mapcar
-			  (lambda (m) (cons (+ 1 (first m)) (cons
-							      (second
+			  (lambda (m) (cons (+ 1 (nth 0 m)) (cons
+							      (nth 1
 							       m) '())))
 			  (create-ignore-list-by-regexp
 			   "\\([^\\]\\|^\\)[\\]\\[\\(.\\|\n\\)+?[\\]\\]"))))
@@ -884,23 +884,23 @@ GENERAL ASSUMPTIONS:
       );if
     );while
     ;;begin{...} in general
-    (setq result (append result (remove-if 
+    (setq result (append result (cl-remove-if
 				 (lambda (x)
 				   (is-point-in-ignore-list
-				    (first x) result)) (create-ignore-list-by-regexp
+				    (nth 0 x) result)) (create-ignore-list-by-regexp
 					       "[\\]begin{.+?}"))))
     ;;end{...} in general
-    (setq result (append result (remove-if 
+    (setq result (append result (cl-remove-if
 				 (lambda (x)
 				   (is-point-in-ignore-list
-				    (first x) result)) (create-ignore-list-by-regexp
+				    (nth 0 x) result)) (create-ignore-list-by-regexp
 					       "[\\]end{.+?}"))))
-    (setq result (append result (remove-if 
+    (setq result (append result (cl-remove-if
 				 (lambda (x)
 				   (is-point-in-ignore-list
-				    (first x) result)) (create-ignore-list-by-regexp
+				    (nth 0 x) result)) (create-ignore-list-by-regexp
 					       "[\\]\\([[:alnum:]]\\|\\[\\|\\]\\|\\)+"))))
-    (sort result (lambda (x y) (<= (first x) (first y))))
+    (sort result (lambda (x y) (<= (nth 0 x) (nth 0 y))))
   );let
 );create-ignore-list-for-latex-buffer ()
 
@@ -942,13 +942,13 @@ the first interval in ign with p in it, and nil otherwise.
 "
   (let
     (;let definitions
-      (tempList (remove-if-not (lambda (m) (and (<= (first m) p) (<= p (second m)))) ign))
+      (tempList (cl-remove-if-not (lambda (m) (and (<= (nth 0 m) p) (<= p (nth 1 m)))) ign))
     );let definitions
     (if (equal tempList ())
       ;then
       nil
       ;else
-      (first tempList)
+      (nth 0 tempList)
     );if
   );let
 );is-point-in-ignore-list
@@ -1016,9 +1016,9 @@ SIDE EFFECTS:
 	  (setq temp-touple (is-point-in-ignore-list (point) ign))
 	  (while (and
 		  (not (equal temp-touple ()))
-		  (<= (second temp-touple) (point-max))
+		  (<= (nth 1 temp-touple) (point-max))
 		  )
-	    (goto-char (+ 1 (second temp-touple)))
+	    (goto-char (+ 1 (nth 1 temp-touple)))
 	    (setq temp-touple (is-point-in-ignore-list (point) ign))
 	    );while
 	  (setq curpos (point))
@@ -1027,7 +1027,7 @@ SIDE EFFECTS:
 	      (setq flag nil)
 	    );if
 	  (setq temp-word "")
-	  (while (and 
+	  (while (and
 		  (< curpos (point))
 		  (not (is-point-in-ignore-list curpos ign)))
 	    (setq temp-word (concat temp-word
@@ -1048,7 +1048,7 @@ SIDE EFFECTS:
 	(setq temp-touple (is-point-in-ignore-list temp-begin ign))
 	(while (and temp-touple
 		    (< temp-begin (point-max)))
-	  (setq temp-begin (+ 1 (second temp-touple)))
+	  (setq temp-begin (+ 1 (nth 1 temp-touple)))
 	  (setq temp-touple (is-point-in-ignore-list temp-begin ign))
 	);while
 	(setq rep-temp-word-block (list result temp-begin curpos))
@@ -1058,12 +1058,12 @@ SIDE EFFECTS:
 					;);if
 	);let
     ;else
-    (goto-char (second rep-temp-word-block))
+    (goto-char (nth 1 rep-temp-word-block))
     (let
 	(;let definitions
-	 (begin-pos (second rep-temp-word-block))
-	 (end-pos (third rep-temp-word-block))
-	 (curWordBlock (first rep-temp-word-block))
+	 (begin-pos (nth 1 rep-temp-word-block))
+	 (end-pos (nth 2 rep-temp-word-block))
+	 (curWordBlock (nth 0 rep-temp-word-block))
 	 (temp-touple nil)
 	 (temp-pos 0)
 	 (flag t)
@@ -1077,7 +1077,7 @@ SIDE EFFECTS:
 	(setq begin-pos (point))
 	(setq temp-touple (is-point-in-ignore-list begin-pos ign))
 	(while temp-touple
-	  (setq begin-pos (+ 1 (second temp-touple)))
+	  (setq begin-pos (+ 1 (nth 1 temp-touple)))
 	  (setq temp-touple (is-point-in-ignore-list begin-pos ign))
 	);while
 	;; now we find the next word at the end.
@@ -1086,9 +1086,9 @@ SIDE EFFECTS:
 	  (setq temp-touple (is-point-in-ignore-list (point) ign))
 	  (while (and
 		  (not (equal temp-touple ()))
-		  (<= (second temp-touple) (point-max))
+		  (<= (nth 1 temp-touple) (point-max))
 		  )
-	    (goto-char (+ 1 (second temp-touple)))
+	    (goto-char (+ 1 (nth 1 temp-touple)))
 	    (setq temp-touple (is-point-in-ignore-list (point) ign))
 	  );while
 	  (setq temp-pos (point))
@@ -1097,7 +1097,7 @@ SIDE EFFECTS:
 	      (setq flag nil)
 	    );if
 	  (setq temp-word "")
-	  (while (and 
+	  (while (and
 		  (< temp-pos (point))
 		  (not (is-point-in-ignore-list temp-pos ign)))
 	    (setq temp-word (concat temp-word
@@ -1178,7 +1178,7 @@ TESTS WITH rep-temp-word-block
   ;6.
   (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
-  (should (equal (get-next-n-words-with-ignore-list 10 1 
+  (should (equal (get-next-n-words-with-ignore-list 10 1
 						    '((1 6) (13 18)
 						      (117 136)))
 		 (list "ipsum sit amet, consetetur sadipscing elitr, sed diam
@@ -1187,7 +1187,7 @@ nonumy eirmod " 7 81)))
   ;7.
   (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
-  (should (equal (get-next-n-words-with-ignore-list 50 1 
+  (should (equal (get-next-n-words-with-ignore-list 50 1
 						    '((1 6) (13 18)
 						      (117 136)))
 		 (list "ipsum sit amet, consetetur sadipscing elitr, sed diam
@@ -1196,7 +1196,7 @@ nonumy eirmod tempor invidunt ut labore et dolore sed diam voluptua. At vero eos
   ;8.
   (setq rep-temp-word-block nil)
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
-  (should (equal (get-next-n-words-with-ignore-list 20 1 
+  (should (equal (get-next-n-words-with-ignore-list 20 1
 						    '((1 296)))
 		 (list "" 297 297)))
   (kill-buffer "test_buffer_50_words.txt")
@@ -1210,13 +1210,50 @@ nonumy eirmod tempor invidunt ut labore et dolore sed diam voluptua. At vero eos
   (setq rep-temp-word-block (list "ipsum sit amet, consetetur sadipscing elitr, sed diam
 nonumy " 1 74))
   (set-buffer (find-file "./test_files/test_buffer_50_words.txt"))
-  (should (equal (get-next-n-words-with-ignore-list 9 1 
+  (should (equal (get-next-n-words-with-ignore-list 9 1
 						    '((1 6) (13 18)
 						      (117 136)))
 		 (list "sit amet, consetetur sadipscing elitr, sed diam
 nonumy eirmod " 7 81)))
   (kill-buffer "test_buffer_50_words.txt")
 );get-next-n-words-with-ignore-list-test
+
+(defun count-if (fun lst)
+"function(element):boolean -> list(element) -> integer
+Given a predicate function func and a list lst, this function counts
+the number of elements e in the lst for which f(e) = true
+"
+  (let ((value 0))
+    (dolist (elt lst value)
+      (if (funcall fun elt)
+          (setq value (+ 1 value))))))
+
+(byte-compile 'count-if)
+
+(ert-deftest count-if ()
+"Here are the tests covered:
+1. Trivial function empty list
+2. Trivial function non-empty list
+3. non-trivial function empty list
+4. non-trivial function non-empty list
+5. false function non-empty list"
+;1
+  (setq temp-lst nil)
+  (setq true-fun (lambda (x) t))
+  (should (equal (count-if true-fun temp-lst) 0))
+;2
+  (setq temp-lst (list 1 2 3))
+  (should (equal (count-if true-fun temp-lst) 3))
+;3
+  (setq temp-lst nil)
+  (setq non-trivial-function (lambda (x) (< x 5)))
+  (should (equal (count-if non-trivial-function temp-lst) 0))
+;4
+  (setq temp-lst (list 1 2 3 4 7 8 9 10))
+  (should (equal (count-if non-trivial-function temp-lst) 4))
+;5
+  (setq false-fun (lambda (x) nil))
+  (should (equal (count-if false-fun temp-lst) 0)))
 
 (defun exceeders (str number)
 "string->integer->listof (list string integer)
@@ -1227,7 +1264,7 @@ if its length is smaller than min-not-ignore-letters letters, and we remove all 
 characters, as well as digits and punctuation symbols, and all the
 letters in a are lowercase.
 "
-  (labels 
+  (cl-labels
       (;function definitions
        (count-each-word (l)
 	 (let
@@ -1240,7 +1277,7 @@ letters in a are lowercase.
 	     (setq occ (count-if (lambda (m) (equal (downcase m) (downcase (car tempList)))) tempList))
 	     (setq result (cons (cons (downcase (car tempList)) (cons occ ()))
 				result))
-	     (setq tempList (remove-if (lambda (m) (equal (downcase m) (downcase (car tempList)))) tempList))
+	     (setq tempList (cl-remove-if (lambda (m) (equal (downcase m) (downcase (car tempList)))) tempList))
 	   );while
 	   (nreverse result)
 	 );let
@@ -1249,13 +1286,13 @@ letters in a are lowercase.
     (;labels body
      let
       (;let definitions
-       (filtered-inp (remove-if (lambda (m) (< (string-width m) min-not-ignore-letters))
+       (filtered-inp (cl-remove-if (lambda (m) (< (string-width m) min-not-ignore-letters))
 				(split-string str
 					      "[[:punct:][:digit:][:space:]\n]"
 					      t)))
       );;let definitions
       (;let body
-       remove-if (lambda (k) (< (second k) number)) (count-each-word
+       cl-remove-if (lambda (k) (< (nth 1 k) number)) (count-each-word
 						     filtered-inp)
       );let body
     );labels body
